@@ -1,0 +1,29 @@
+{
+  "name": "zeropress-theme",
+  "version": "0.1.1",
+  "description": "ZeroPress theme developer toolkit",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "zeropress-theme": "./bin/zeropress-theme.js"
+  },
+  "files": [
+    "bin",
+    "src"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zeropress-app/zeropress-theme.git"
+  },
+  "bugs": {
+    "url": "https://github.com/zeropress-app/zeropress-theme/issues"
+  },
+  "homepage": "https://github.com/zeropress-app/zeropress-theme#readme",
+  "engines": {
+    "node": ">=18.18.0"
+  },
+  "dependencies": {
+    "jszip": "^3.10.1",
+    "ws": "^8.18.0"
+  }
+}
