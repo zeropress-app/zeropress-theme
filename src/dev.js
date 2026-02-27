@@ -32,6 +32,15 @@ export async function runDev(argv) {
 
   const server = http.createServer((req, res) => handleRequest(req, res, themeDir, previewData));
   const wss = new WebSocketServer({ server, path: '/__zeropress_ws' });
+  const sockets = new Set();
+  let shuttingDown = false;
+
+  server.on('connection', (socket) => {
+    sockets.add(socket);
+    socket.on('close', () => {
+      sockets.delete(socket);
+    });
+  });
 
   const watchers = await createWatchers(themeDir, async () => {
     if (!noJsCheck) {
@@ -56,16 +65,39 @@ export async function runDev(argv) {
     }
   });
 
-  const shutdown = () => {
+  const shutdown = (signal) => {
+    if (shuttingDown) {
+      return;
+    }
+    shuttingDown = true;
+    console.log(`[dev] received ${signal}, shutting down...`);
+
     for (const watcher of watchers) {
       watcher.close();
     }
+
+    for (const client of wss.clients) {
+      client.terminate();
+    }
     wss.close();
-    server.close(() => process.exit(0));
+
+    for (const socket of sockets) {
+      socket.destroy();
+    }
+
+    const forceExit = setTimeout(() => {
+      process.exit(0);
+    }, 1500);
+    forceExit.unref();
+
+    server.close(() => {
+      clearTimeout(forceExit);
+      process.exit(0);
+    });
   };
 
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
+  process.once('SIGINT', () => shutdown('SIGINT'));
+  process.once('SIGTERM', () => shutdown('SIGTERM'));
 }
 
 function parseDevArgs(argv) {
