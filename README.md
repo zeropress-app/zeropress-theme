@@ -33,7 +33,7 @@ Launches a local preview server with WebSocket-based live reload.
 
 Behavior highlights:
 
-- Watches template/assets changes and performs full reload
+- Watches theme directory changes and performs full reload
 - Non-matching routes return 404
 - If `404.html` exists at theme root, it is rendered; otherwise a built-in 404 page is used
 
@@ -159,7 +159,7 @@ Related
 -------
 
 *   [create-zeropress-theme](https://www.npmjs.com/package/create-zeropress-theme)
-*   ZeroPress Theme Spec: [https://zeropress.dev](https://zeropress.dev)
+*   ZeroPress Theme Spec v0.1: [https://zeropress.dev/spec/theme-runtime-v0.1.html](https://zeropress.dev/spec/theme-runtime-v0.1.html)
 
 * * *
 
