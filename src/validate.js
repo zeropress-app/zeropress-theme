@@ -185,16 +185,47 @@ async function validateFromFileMap(fileMap, context) {
   }
 
   const templatesToCheck = [...REQUIRED_TEMPLATES, ...OPTIONAL_TEMPLATES, 'layout.html', '404.html'];
+  const templateContents = new Map();
   for (const template of new Set(templatesToCheck)) {
     if (!exists(template)) {
       continue;
     }
     const content = await readFile(template);
+    templateContents.set(template, content);
     validateTemplateSyntax(template, content, errors, noJsCheck);
   }
 
+  validateCommentsPlaceholderGuidance(templateContents, warnings);
+
   if (exists('partials')) {
     // no-op for virtual sources
+  }
+}
+
+function validateCommentsPlaceholderGuidance(templateContents, warnings) {
+  const commentsPlaceholder = '{{post.comments_html}}';
+  const postTemplate = templateContents.get('post.html');
+
+  if (typeof postTemplate === 'string' && !postTemplate.includes(commentsPlaceholder)) {
+    warnings.push({
+      code: 'MISSING_POST_COMMENTS_PLACEHOLDER',
+      path: 'post.html',
+      message: "Consider adding '{{post.comments_html}}' to post.html to render post comments",
+    });
+  }
+
+  for (const [templatePath, content] of templateContents.entries()) {
+    if (templatePath === 'post.html') {
+      continue;
+    }
+    if (!content.includes(commentsPlaceholder)) {
+      continue;
+    }
+    warnings.push({
+      code: 'COMMENTS_PLACEHOLDER_OUTSIDE_POST_TEMPLATE',
+      path: templatePath,
+      message: "'{{post.comments_html}}' should be used in post.html, not in this template",
+    });
   }
 }
 

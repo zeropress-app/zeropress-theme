@@ -68,6 +68,10 @@ Data loading rules:
 - No retry on fetch failure
 - Download or JSON parse failure aborts `dev` startup
 
+Template variable note:
+
+- Post templates can render optional comments markup via `{{post.comments_html}}`.
+
 * * *
 
 ### validate — Theme Validation
@@ -99,6 +103,8 @@ Options:
 #### Warnings
 
 *   `archive.html`, `category.html`, `tag.html` missing
+*   `post.html` does not include `{{post.comments_html}}` (recommended for comment rendering)
+*   `{{post.comments_html}}` used outside `post.html`
 
 #### Exit Codes
 
