@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import JSZip from 'jszip';
 import { runPack } from '../src/pack.js';
 import { runValidate, validateThemeDirectory } from '../src/validate.js';
 
@@ -16,6 +17,19 @@ async function createThemeDir(files) {
   }
 
   return root;
+}
+
+async function createZipFile(files, zipName = 'theme.zip') {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-theme-zip-'));
+  const zipPath = path.join(root, zipName);
+  const zip = new JSZip();
+
+  for (const [relativePath, content] of Object.entries(files)) {
+    zip.file(relativePath, content);
+  }
+
+  await fs.writeFile(zipPath, await zip.generateAsync({ type: 'uint8array' }));
+  return { root, zipPath };
 }
 
 function validThemeFiles() {
@@ -75,6 +89,23 @@ test('runValidate returns 1 and emits json for invalid theme in strict json mode
   }
 });
 
+test('runValidate accepts a valid zip file path', async () => {
+  const files = {
+    ...validThemeFiles(),
+    'archive.html': '<section>archive</section>',
+    'category.html': '<section>category</section>',
+    'tag.html': '<section>tag</section>',
+  };
+  const { root, zipPath } = await createZipFile(files);
+
+  try {
+    const code = await runValidate([zipPath]);
+    assert.equal(code, 0);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
 test('runPack aborts when shared validation finds errors', async () => {
   const files = validThemeFiles();
   delete files['page.html'];
@@ -82,4 +113,31 @@ test('runPack aborts when shared validation finds errors', async () => {
 
   await assert.rejects(() => runPack([themeDir]), /Pack aborted: validate failed/);
   await fs.rm(themeDir, { recursive: true, force: true });
+});
+
+test('runPack --dry-run prints output plan without writing zip', async () => {
+  const files = {
+    ...validThemeFiles(),
+    'archive.html': '<section>archive</section>',
+    'category.html': '<section>category</section>',
+    'tag.html': '<section>tag</section>',
+  };
+  const themeDir = await createThemeDir(files);
+  const outDir = path.join(themeDir, 'artifacts');
+  const expectedZipPath = path.join(outDir, 'test-theme-1.0.0.zip');
+  const logs = [];
+  const originalLog = console.log;
+  console.log = (...args) => {
+    logs.push(args.join(' '));
+  };
+
+  try {
+    await runPack([themeDir, '--out', outDir, '--dry-run']);
+    await assert.rejects(() => fs.access(expectedZipPath));
+    assert.equal(logs.some((line) => line.includes(`Dry run: would pack theme to ${expectedZipPath}`)), true);
+    assert.equal(logs.some((line) => line.includes('Included files:')), true);
+  } finally {
+    console.log = originalLog;
+    await fs.rm(themeDir, { recursive: true, force: true });
+  }
 });

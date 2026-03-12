@@ -77,10 +77,20 @@ Template variable note:
 ### validate — Theme Validation
 
 ```bash
-npx zeropress-theme validate [themeDir] [options]
+npx zeropress-theme validate [themeDir|theme.zip] [options]
 ```
 
-Validates a theme against the ZeroPress Theme Runtime v0.1 contract.
+Validates a theme directory or packaged zip against the ZeroPress Theme Runtime v0.1 contract.
+
+Examples:
+
+```bash
+# Validate a theme directory
+npx zeropress-theme validate ./my-theme
+
+# Validate a packaged zip
+npx zeropress-theme validate ./dist/my-theme-1.0.0.zip
+```
 
 Options:
 
@@ -105,6 +115,7 @@ Options:
 *   `archive.html`, `category.html`, `tag.html` missing
 *   `post.html` does not include `{{post.comments_html}}` (recommended for comment rendering)
 *   `{{post.comments_html}}` used outside `post.html`
+*   macOS metadata files such as `__MACOSX/` and `._*` are ignored
 
 #### Exit Codes
 
@@ -130,6 +141,7 @@ Creates an upload-ready zip file.
 | --- | --- | --- |
 | `--out <dir>` | Output directory | `dist` |
 | `--name <file>` | Zip filename | `{name}-{version}.zip` |
+| `--dry-run` | Show the output path and included files without writing a zip | — |
 
 Workflow:
 
@@ -137,6 +149,8 @@ Workflow:
 2.  Excludes unnecessary files
 3.  Generates a root-flattened zip
 4.  Re-validates the archive
+
+With `--dry-run`, `pack` performs the same pre-pack validation and file selection, then prints the output path and included files without creating the archive.
 
 Excluded automatically:  
 `.git`, `node_modules`, `dist`, `*.log`, `__MACOSX`, `.DS_Store`, lockfiles
@@ -148,6 +162,8 @@ CI Usage
 
 ```bash
 npx zeropress-theme validate ./theme --strict
+npx zeropress-theme validate ./artifacts/theme-1.0.0.zip --strict
+npx zeropress-theme pack ./theme --dry-run
 npx zeropress-theme pack ./theme --out ./artifacts
 ```
 

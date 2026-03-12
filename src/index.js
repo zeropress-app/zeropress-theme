@@ -34,6 +34,6 @@ function printHelp() {
 
 Usage:
   zeropress-theme dev [themeDir] [--port <n>] [--host <ip>] [--data <path-or-url>] [--open] [--no-js-check]
-  zeropress-theme validate [themeDir] [--strict] [--json]
-  zeropress-theme pack [themeDir] [--out <dir>] [--name <zipFile>]`);
+  zeropress-theme validate [themeDir|theme.zip] [--strict] [--json]
+  zeropress-theme pack [themeDir] [--out <dir>] [--name <zipFile>] [--dry-run]`);
 }

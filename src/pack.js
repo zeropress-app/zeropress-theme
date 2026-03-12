@@ -9,6 +9,7 @@ export async function runPack(argv) {
   const { positional, flags } = parsePackArgs(argv);
   const themeDir = getThemeDir(positional[0]);
   const outDir = path.resolve(process.cwd(), flags.out || 'dist');
+  const dryRun = flags['dry-run'] === true;
 
   const preValidation = await validateThemeDirectory(themeDir, { noJsCheck: false });
   if (preValidation.errors.length > 0) {
@@ -19,14 +20,11 @@ export async function runPack(argv) {
   const themeJson = JSON.parse(themeJsonRaw);
   const defaultName = `${sanitizeFileName(themeJson.name)}-${sanitizeFileName(themeJson.version)}.zip`;
   const fileName = flags.name || defaultName;
-
-  await fs.mkdir(outDir, { recursive: true });
   const zipPath = path.join(outDir, fileName);
 
-  const zip = new JSZip();
   const entries = await walkDirectory(themeDir);
-
   const seenPaths = new Map();
+  const includedFiles = [];
 
   for (const item of entries) {
     if (!item.entry.isFile()) {
@@ -44,9 +42,30 @@ export async function runPack(argv) {
       throw new Error(`Pack aborted: flatten path collision detected (${zipRel} conflicts with ${seenPaths.get(key)})`);
     }
     seenPaths.set(key, zipRel);
+    includedFiles.push({
+      zipPath: zipRel,
+      fullPath: item.fullPath,
+    });
+  }
 
-    const content = await fs.readFile(item.fullPath);
-    zip.file(zipRel, content);
+  if (dryRun) {
+    console.log(`Dry run: would pack theme to ${zipPath}`);
+    console.log(`Included files: ${includedFiles.length}`);
+    for (const file of includedFiles) {
+      console.log(` - ${file.zipPath}`);
+    }
+    if (preValidation.warnings.length > 0) {
+      console.log(`Validation warnings: ${preValidation.warnings.length}`);
+    }
+    return;
+  }
+
+  await fs.mkdir(outDir, { recursive: true });
+  const zip = new JSZip();
+
+  for (const file of includedFiles) {
+    const content = await fs.readFile(file.fullPath);
+    zip.file(file.zipPath, content);
   }
 
   const buffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
@@ -82,6 +101,11 @@ function parsePackArgs(argv) {
       }
       flags[token.slice(2)] = value;
       i += 1;
+      continue;
+    }
+
+    if (token === '--dry-run') {
+      flags['dry-run'] = true;
       continue;
     }
 
