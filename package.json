@@ -22,8 +22,12 @@
   "engines": {
     "node": ">=18.18.0"
   },
+  "scripts": {
+    "test": "node --test"
+  },
   "dependencies": {
     "jszip": "^3.10.1",
+    "@zeropress/theme-validator": "^0.1.0",
     "ws": "^8.18.0"
   }
 }
