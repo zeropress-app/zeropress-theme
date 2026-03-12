@@ -30,7 +30,7 @@ export async function run(argv) {
 }
 
 function printHelp() {
-  console.log(`zeropress-theme v0.1.0
+  console.log(`zeropress-theme - ZeroPress theme developer toolkit
 
 Usage:
   zeropress-theme dev [themeDir] [--port <n>] [--host <ip>] [--data <path-or-url>] [--open] [--no-js-check]

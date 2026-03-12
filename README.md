@@ -13,6 +13,7 @@ Developer toolkit for building, validating, and packaging ZeroPress themes.
 ```bash
 # Run directly with npx
 npx zeropress-theme <command>
+npx zeropress-theme --help
 
 # Or install globally
 npm install -g zeropress-theme
