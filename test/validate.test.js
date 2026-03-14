@@ -36,8 +36,11 @@ function validThemeFiles() {
   return {
     'theme.json': JSON.stringify({
       name: 'Test Theme',
+      namespace: 'test-studio',
+      slug: 'test-theme',
       version: '1.0.0',
-      author: 'ZeroPress',
+      license: 'MIT',
+      runtime: '0.2',
       description: 'A test theme',
     }),
     'layout.html': '<main>{{slot:content}}</main>',
@@ -103,6 +106,25 @@ test('runValidate accepts a valid zip file path', async () => {
     assert.equal(code, 0);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test('runValidate rejects a legacy v0.1 manifest', async () => {
+  const themeDir = await createThemeDir({
+    ...validThemeFiles(),
+    'theme.json': JSON.stringify({
+      name: 'Legacy Theme',
+      version: '1.0.0',
+      author: 'ZeroPress',
+      description: 'legacy',
+    }),
+  });
+
+  try {
+    const code = await runValidate([themeDir]);
+    assert.equal(code, 1);
+  } finally {
+    await fs.rm(themeDir, { recursive: true, force: true });
   }
 });
 

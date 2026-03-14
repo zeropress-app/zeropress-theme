@@ -27,7 +27,7 @@
   },
   "dependencies": {
     "jszip": "^3.10.1",
-    "@zeropress/theme-validator": "^0.1.1",
+    "@zeropress/theme-validator": "^0.2.0",
     "ws": "^8.18.0"
   }
 }

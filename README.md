@@ -81,7 +81,7 @@ Template variable note:
 npx zeropress-theme validate [themeDir|theme.zip] [options]
 ```
 
-Validates a theme directory or packaged zip against the ZeroPress Theme Runtime v0.1 contract.
+Validates a theme directory or packaged zip against the ZeroPress Theme Runtime v0.2 contract.
 
 Examples:
 
@@ -103,6 +103,7 @@ Options:
 #### Errors (block upload)
 
 *   `theme.json` missing or invalid
+*   Missing or invalid `namespace`, `slug`, `license`, or `runtime`
 *   Missing required templates: `layout.html`, `index.html`, `post.html`, `page.html`
 *   Invalid semver in `version`
 *   `assets/style.css` missing
@@ -182,7 +183,7 @@ Related
 -------
 
 *   [create-zeropress-theme](https://www.npmjs.com/package/create-zeropress-theme)
-*   ZeroPress Theme Spec v0.1: [https://zeropress.dev/spec/theme-runtime-v0.1.html](https://zeropress.dev/spec/theme-runtime-v0.1.html)
+*   ZeroPress Theme Spec v0.2: [https://zeropress.dev/spec/theme-runtime-v0.2.html](https://zeropress.dev/spec/theme-runtime-v0.2.html)
 
 * * *
 
