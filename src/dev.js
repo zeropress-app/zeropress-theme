@@ -4,6 +4,7 @@ import path from 'node:path';
 import http from 'node:http';
 import { spawn } from 'node:child_process';
 import { WebSocketServer } from 'ws';
+import { PREVIEW_DATA_VERSION, assertPreviewData } from '@zeropress/preview-data-validator';
 import { MAX_REMOTE_DATA_BYTES, REMOTE_TIMEOUT_MS } from './constants.js';
 import { getThemeDir, isHttpUrl, isHttpsUrl } from './helpers.js';
 import { validateThemeDirectory } from './validate.js';
@@ -28,7 +29,7 @@ export async function runDev(argv) {
   }
 
   const previewData = await loadPreviewData(flags.data);
-  ensurePreviewDataMinimum(previewData);
+  assertPreviewData(previewData);
 
   const server = http.createServer((req, res) => handleRequest(req, res, themeDir, previewData));
   const wss = new WebSocketServer({ server, path: '/__zeropress_ws' });
@@ -133,7 +134,7 @@ function parseDevArgs(argv) {
   return { positional, flags };
 }
 
-async function loadPreviewData(dataArg) {
+export async function loadPreviewData(dataArg) {
   if (!dataArg) {
     return defaultPreviewData();
   }
@@ -166,48 +167,78 @@ async function loadPreviewData(dataArg) {
   return JSON.parse(raw);
 }
 
-function ensurePreviewDataMinimum(data) {
-  if (!data || typeof data !== 'object') {
-    throw new Error('Preview data must be an object');
-  }
-  if (!data.site || typeof data.site !== 'object') {
-    throw new Error('Preview data must include site object');
-  }
-  for (const key of ['title', 'description', 'url', 'language']) {
-    if (typeof data.site[key] !== 'string' || data.site[key].trim() === '') {
-      throw new Error(`Preview data site.${key} is required`);
-    }
-  }
-}
-
-function defaultPreviewData() {
+export function defaultPreviewData() {
   return {
+    version: PREVIEW_DATA_VERSION,
+    generator: 'zeropress-theme',
+    generated_at: '2026-03-26T00:00:00.000Z',
     site: {
       title: 'ZeroPress Preview',
       description: 'Default preview data',
       url: 'https://example.com',
       language: 'en',
     },
-    posts: [
-      {
-        title: 'Hello ZeroPress',
-        slug: 'hello-zeropress',
-        html: '<p>Preview post content</p>',
-        excerpt: 'Preview excerpt',
-        published_at: '2026-02-14',
-        updated_at: '2026-02-14',
-        author_name: 'Admin',
+    content: {
+      posts: [
+        {
+          id: 'post-1',
+          public_id: 101,
+          title: 'Hello ZeroPress',
+          slug: 'hello-zeropress',
+          html: '<p>Preview post content</p>',
+          excerpt: 'Preview excerpt',
+          published_at: '2026-02-14 09:00',
+          updated_at: '2026-02-14 09:00',
+          published_at_iso: '2026-02-14T09:00:00.000Z',
+          updated_at_iso: '2026-02-14T09:00:00.000Z',
+          reading_time: '1 min read',
+          author_name: 'Admin',
+          categories_html: '<a href="/categories/general/" class="category-link">General</a>',
+          tags_html: '<a href="/tags/intro/" class="tag-link">Intro</a>',
+          comments_html: '<section id="comments"></section>',
+          status: 'published',
+        },
+      ],
+      pages: [
+        {
+          id: 'page-1',
+          title: 'About',
+          slug: 'about',
+          html: '<p>About page</p>',
+          status: 'published',
+        },
+      ],
+      categories: [{ id: 'cat-1', name: 'General', slug: 'general', description: 'General posts', postCount: 1 }],
+      tags: [{ id: 'tag-1', name: 'Intro', slug: 'intro', postCount: 1 }],
+    },
+    routes: {
+      index: {
+        posts: '<article><h2><a href="/posts/hello-zeropress">Hello ZeroPress</a></h2><div>Preview excerpt</div></article>',
+        categories: '<a href="/categories/general/" class="category-link">General (1)</a>',
+        tags: '<a href="/tags/intro/" class="tag-link">Intro (1)</a>',
+        pagination: '',
       },
-    ],
-    pages: [
-      {
-        title: 'About',
-        slug: 'about',
-        html: '<p>About page</p>',
+      archive: {
+        posts: '<article><h2><a href="/posts/hello-zeropress">Hello ZeroPress</a></h2><div>Preview excerpt</div></article>',
+        pagination: '',
       },
-    ],
-    categories: [{ name: 'General', slug: 'general', postCount: 1 }],
-    tags: [{ name: 'Intro', slug: 'intro', postCount: 1 }],
+      categories: [
+        {
+          slug: 'general',
+          posts: '<article><h2><a href="/posts/hello-zeropress">Hello ZeroPress</a></h2><div>Preview excerpt</div></article>',
+          pagination: '',
+          categories: '<a href="/categories/general/" class="category-link">General (1)</a>',
+        },
+      ],
+      tags: [
+        {
+          slug: 'intro',
+          posts: '<article><h2><a href="/posts/hello-zeropress">Hello ZeroPress</a></h2><div>Preview excerpt</div></article>',
+          pagination: '',
+          tags: '<a href="/tags/intro/" class="tag-link">Intro (1)</a>',
+        },
+      ],
+    },
   };
 }
 
@@ -236,16 +267,16 @@ async function handleRequest(req, res, themeDir, data) {
   }
 }
 
-async function renderRoute(pathname, themeDir, data) {
+export async function renderRoute(pathname, themeDir, data) {
   const normalized = pathname.replace(/\/+$/, '') || '/';
 
   if (normalized === '/') {
-    return { html: await renderWithLayout(themeDir, 'index.html', { ...data, posts: renderPostList(data.posts) }) };
+    return { html: await renderWithLayout(themeDir, 'index.html', { ...data, ...data.routes.index }) };
   }
 
   const postMatch = normalized.match(/^\/posts\/([^/]+)$/);
   if (postMatch) {
-    const post = (data.posts || []).find((p) => p.slug === postMatch[1]);
+    const post = (data.content.posts || []).find((p) => p.slug === postMatch[1]);
     if (!post) {
       return { html: await render404(themeDir), notFound: true };
     }
@@ -254,7 +285,7 @@ async function renderRoute(pathname, themeDir, data) {
 
   const pageMatch = normalized.match(/^\/([^/]+)$/);
   if (pageMatch && pageMatch[1] !== 'archive') {
-    const page = (data.pages || []).find((p) => p.slug === pageMatch[1]);
+    const page = (data.content.pages || []).find((p) => p.slug === pageMatch[1]);
     if (!page) {
       return { html: await render404(themeDir), notFound: true };
     }
@@ -265,7 +296,7 @@ async function renderRoute(pathname, themeDir, data) {
     if (!(await fileExists(path.join(themeDir, 'archive.html')))) {
       return { html: await render404(themeDir), notFound: true };
     }
-    return { html: await renderWithLayout(themeDir, 'archive.html', { ...data, posts: renderPostList(data.posts) }) };
+    return { html: await renderWithLayout(themeDir, 'archive.html', { ...data, ...data.routes.archive }) };
   }
 
   const categoryMatch = normalized.match(/^\/categories\/([^/]+)$/);
@@ -273,11 +304,11 @@ async function renderRoute(pathname, themeDir, data) {
     if (!(await fileExists(path.join(themeDir, 'category.html')))) {
       return { html: await render404(themeDir), notFound: true };
     }
-    const posts = (data.posts || []).filter((post) => {
-      const list = post.categories || [];
-      return list.includes(categoryMatch[1]) || list.includes(capitalize(categoryMatch[1]));
-    });
-    return { html: await renderWithLayout(themeDir, 'category.html', { ...data, posts: renderPostList(posts) }) };
+    const routeData = (data.routes.categories || []).find((entry) => entry.slug === categoryMatch[1]);
+    if (!routeData) {
+      return { html: await render404(themeDir), notFound: true };
+    }
+    return { html: await renderWithLayout(themeDir, 'category.html', { ...data, ...routeData }) };
   }
 
   const tagMatch = normalized.match(/^\/tags\/([^/]+)$/);
@@ -285,23 +316,14 @@ async function renderRoute(pathname, themeDir, data) {
     if (!(await fileExists(path.join(themeDir, 'tag.html')))) {
       return { html: await render404(themeDir), notFound: true };
     }
-    const posts = (data.posts || []).filter((post) => {
-      const list = post.tags || [];
-      return list.includes(tagMatch[1]) || list.includes(capitalize(tagMatch[1]));
-    });
-    return { html: await renderWithLayout(themeDir, 'tag.html', { ...data, posts: renderPostList(posts) }) };
+    const routeData = (data.routes.tags || []).find((entry) => entry.slug === tagMatch[1]);
+    if (!routeData) {
+      return { html: await render404(themeDir), notFound: true };
+    }
+    return { html: await renderWithLayout(themeDir, 'tag.html', { ...data, ...routeData }) };
   }
 
   return { html: await render404(themeDir), notFound: true };
-}
-
-function renderPostList(posts = []) {
-  if (!posts.length) {
-    return '<p>No posts</p>';
-  }
-  return posts
-    .map((post) => `<article><h2><a href="/posts/${post.slug}">${escapeHtml(post.title || '')}</a></h2><div>${post.excerpt || ''}</div></article>`)
-    .join('\n');
 }
 
 async function renderWithLayout(themeDir, templateName, data) {
@@ -378,11 +400,6 @@ function escapeHtml(value) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
-}
-
-function capitalize(value) {
-  if (!value) return value;
-  return value[0].toUpperCase() + value.slice(1);
 }
 
 async function readOptional(filePath) {

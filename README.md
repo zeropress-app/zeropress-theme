@@ -62,6 +62,13 @@ npx zeropress-theme dev ./my-theme --data https://signed-url/preview.json
 If `--data` is omitted, built-in sample data is used.  
 Remote URLs must use HTTPS (1 MB limit, 5-second timeout).
 
+Preview data contract:
+
+- `dev` only accepts the canonical preview-data v0.2 payload
+- Legacy minimal JSON payloads are rejected at startup
+- `--data` can point to a local JSON file or an HTTPS URL that returns a v0.2 payload
+- The built-in sample data also conforms to preview-data v0.2
+
 Data loading rules:
 
 - Local file path and HTTPS URL are both supported
