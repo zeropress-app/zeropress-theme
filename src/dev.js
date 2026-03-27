@@ -32,6 +32,8 @@ export async function runDev(argv) {
   assertPreviewData(previewData);
 
   const server = http.createServer((req, res) => handleRequest(req, res, themeDir, previewData));
+  await listenServer(server, host, port);
+
   const wss = new WebSocketServer({ server, path: '/__zeropress_ws' });
   const sockets = new Set();
   let shuttingDown = false;
@@ -58,13 +60,11 @@ export async function runDev(argv) {
     }
   });
 
-  server.listen(port, host, () => {
-    const url = `http://${host}:${port}`;
-    console.log(`[dev] running at ${url}`);
-    if (flags.open === true) {
-      openBrowser(url);
-    }
-  });
+  const url = `http://${host}:${port}`;
+  console.log(`[dev] running at ${url}`);
+  if (flags.open === true) {
+    openBrowser(url);
+  }
 
   const shutdown = (signal) => {
     if (shuttingDown) {
@@ -132,6 +132,32 @@ function parseDevArgs(argv) {
   }
 
   return { positional, flags };
+}
+
+function listenServer(server, host, port) {
+  return new Promise((resolve, reject) => {
+    const onError = (error) => {
+      server.off('listening', onListening);
+      reject(normalizeListenError(error, host, port));
+    };
+
+    const onListening = () => {
+      server.off('error', onError);
+      resolve();
+    };
+
+    server.once('error', onError);
+    server.once('listening', onListening);
+    server.listen(port, host);
+  });
+}
+
+export function normalizeListenError(error, host, port) {
+  if (error && typeof error === 'object' && error.code === 'EADDRINUSE') {
+    return new Error(`Dev server could not start: ${host}:${port} is already in use. Try --port with a different value.`);
+  }
+
+  return error instanceof Error ? error : new Error(String(error));
 }
 
 export async function loadPreviewData(dataArg) {

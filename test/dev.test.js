@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { assertPreviewData } from '@zeropress/preview-data-validator';
-import { defaultPreviewData, renderRoute, runDev } from '../src/dev.js';
+import { defaultPreviewData, normalizeListenError, renderRoute, runDev } from '../src/dev.js';
 
 async function createThemeDir(files) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-theme-dev-'));
@@ -102,4 +102,14 @@ test('runDev rejects legacy preview data payloads', async () => {
   } finally {
     await fs.rm(themeDir, { recursive: true, force: true });
   }
+});
+
+test('normalizeListenError returns a friendly message for port conflicts', () => {
+  const normalized = normalizeListenError(
+    Object.assign(new Error('listen EADDRINUSE'), { code: 'EADDRINUSE' }),
+    '127.0.0.1',
+    4321,
+  );
+
+  assert.match(normalized.message, /127\.0\.0\.1:4321 is already in use/);
 });
