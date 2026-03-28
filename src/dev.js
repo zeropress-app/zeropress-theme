@@ -224,6 +224,42 @@ export function defaultPreviewData() {
           comments_html: '<section id="comments"></section>',
           status: 'published',
         },
+        {
+          id: 'post-2',
+          public_id: 102,
+          title: 'Theme Blocks Deep Dive',
+          slug: 'theme-blocks-deep-dive',
+          html: '<p>Second preview post content</p>',
+          excerpt: 'Second preview excerpt',
+          published_at: '2026-02-13 09:00',
+          updated_at: '2026-02-13 09:00',
+          published_at_iso: '2026-02-13T09:00:00.000Z',
+          updated_at_iso: '2026-02-13T09:00:00.000Z',
+          reading_time: '2 min read',
+          author_name: 'Admin',
+          categories_html: '<a href="/categories/general/" class="category-link">General</a>',
+          tags_html: '<a href="/tags/intro/" class="tag-link">Intro</a>',
+          comments_html: '<section id="comments"></section>',
+          status: 'published',
+        },
+        {
+          id: 'post-3',
+          public_id: 103,
+          title: 'Archive Patterns',
+          slug: 'archive-patterns',
+          html: '<p>Third preview post content</p>',
+          excerpt: 'Third preview excerpt',
+          published_at: '2026-02-12 09:00',
+          updated_at: '2026-02-12 09:00',
+          published_at_iso: '2026-02-12T09:00:00.000Z',
+          updated_at_iso: '2026-02-12T09:00:00.000Z',
+          reading_time: '3 min read',
+          author_name: 'Admin',
+          categories_html: '<a href="/categories/general/" class="category-link">General</a>',
+          tags_html: '<a href="/tags/intro/" class="tag-link">Intro</a>',
+          comments_html: '<section id="comments"></section>',
+          status: 'published',
+        },
       ],
       pages: [
         {
@@ -238,30 +274,89 @@ export function defaultPreviewData() {
       tags: [{ id: 'tag-1', name: 'Intro', slug: 'intro', postCount: 1 }],
     },
     routes: {
-      index: {
-        posts: '<article><h2><a href="/posts/hello-zeropress">Hello ZeroPress</a></h2><div>Preview excerpt</div></article>',
-        categories: '<a href="/categories/general/" class="category-link">General (1)</a>',
-        tags: '<a href="/tags/intro/" class="tag-link">Intro (1)</a>',
-        pagination: '',
-      },
-      archive: {
-        posts: '<article><h2><a href="/posts/hello-zeropress">Hello ZeroPress</a></h2><div>Preview excerpt</div></article>',
-        pagination: '',
-      },
+      index: [
+        {
+          path: '/',
+          page: 1,
+          totalPages: 2,
+          posts: [
+            '<article><h2><a href="/posts/hello-zeropress">Hello ZeroPress</a></h2><div>Preview excerpt</div></article>',
+            '<article><h2><a href="/posts/theme-blocks-deep-dive">Theme Blocks Deep Dive</a></h2><div>Second preview excerpt</div></article>',
+          ].join(''),
+          categories: '<a href="/categories/general/" class="category-link">General (3)</a>',
+          tags: '<a href="/tags/intro/" class="tag-link">Intro (3)</a>',
+          pagination: '<nav class="pagination"><span class="current">1</span><a href="/page/2/">2</a></nav>',
+        },
+        {
+          path: '/page/2/',
+          page: 2,
+          totalPages: 2,
+          posts: '<article><h2><a href="/posts/archive-patterns">Archive Patterns</a></h2><div>Third preview excerpt</div></article>',
+          categories: '<a href="/categories/general/" class="category-link">General (3)</a>',
+          tags: '<a href="/tags/intro/" class="tag-link">Intro (3)</a>',
+          pagination: '<nav class="pagination"><a href="/">1</a><span class="current">2</span></nav>',
+        },
+      ],
+      archive: [
+        {
+          path: '/archive/',
+          page: 1,
+          totalPages: 2,
+          posts: '<article><h2><a href="/posts/hello-zeropress">Hello ZeroPress</a></h2><div>Preview excerpt</div></article>',
+          pagination: '<nav class="pagination"><span class="current">1</span><a href="/archive/page/2/">2</a></nav>',
+        },
+        {
+          path: '/archive/page/2/',
+          page: 2,
+          totalPages: 2,
+          posts: '<article><h2><a href="/posts/archive-patterns">Archive Patterns</a></h2><div>Third preview excerpt</div></article>',
+          pagination: '<nav class="pagination"><a href="/archive/">1</a><span class="current">2</span></nav>',
+        },
+      ],
       categories: [
         {
+          path: '/categories/general/',
           slug: 'general',
-          posts: '<article><h2><a href="/posts/hello-zeropress">Hello ZeroPress</a></h2><div>Preview excerpt</div></article>',
-          pagination: '',
-          categories: '<a href="/categories/general/" class="category-link">General (1)</a>',
+          page: 1,
+          totalPages: 2,
+          posts: [
+            '<article><h2><a href="/posts/hello-zeropress">Hello ZeroPress</a></h2><div>Preview excerpt</div></article>',
+            '<article><h2><a href="/posts/theme-blocks-deep-dive">Theme Blocks Deep Dive</a></h2><div>Second preview excerpt</div></article>',
+          ].join(''),
+          pagination: '<nav class="pagination"><span class="current">1</span><a href="/categories/general/page/2/">2</a></nav>',
+          categories: '<a href="/categories/general/" class="category-link">General (3)</a>',
+        },
+        {
+          path: '/categories/general/page/2/',
+          slug: 'general',
+          page: 2,
+          totalPages: 2,
+          posts: '<article><h2><a href="/posts/archive-patterns">Archive Patterns</a></h2><div>Third preview excerpt</div></article>',
+          pagination: '<nav class="pagination"><a href="/categories/general/">1</a><span class="current">2</span></nav>',
+          categories: '<a href="/categories/general/" class="category-link">General (3)</a>',
         },
       ],
       tags: [
         {
+          path: '/tags/intro/',
           slug: 'intro',
-          posts: '<article><h2><a href="/posts/hello-zeropress">Hello ZeroPress</a></h2><div>Preview excerpt</div></article>',
-          pagination: '',
-          tags: '<a href="/tags/intro/" class="tag-link">Intro (1)</a>',
+          page: 1,
+          totalPages: 2,
+          posts: [
+            '<article><h2><a href="/posts/hello-zeropress">Hello ZeroPress</a></h2><div>Preview excerpt</div></article>',
+            '<article><h2><a href="/posts/theme-blocks-deep-dive">Theme Blocks Deep Dive</a></h2><div>Second preview excerpt</div></article>',
+          ].join(''),
+          pagination: '<nav class="pagination"><span class="current">1</span><a href="/tags/intro/page/2/">2</a></nav>',
+          tags: '<a href="/tags/intro/" class="tag-link">Intro (3)</a>',
+        },
+        {
+          path: '/tags/intro/page/2/',
+          slug: 'intro',
+          page: 2,
+          totalPages: 2,
+          posts: '<article><h2><a href="/posts/archive-patterns">Archive Patterns</a></h2><div>Third preview excerpt</div></article>',
+          pagination: '<nav class="pagination"><a href="/tags/intro/">1</a><span class="current">2</span></nav>',
+          tags: '<a href="/tags/intro/" class="tag-link">Intro (3)</a>',
         },
       ],
     },
@@ -294,10 +389,35 @@ async function handleRequest(req, res, themeDir, data) {
 }
 
 export async function renderRoute(pathname, themeDir, data) {
-  const normalized = safeDecodePath(pathname).replace(/\/+$/, '') || '/';
+  const normalized = normalizeRoutePath(pathname);
 
-  if (normalized === '/') {
-    return { html: await renderWithLayout(themeDir, 'index.html', { ...data, ...data.routes.index }) };
+  const indexRoute = findRouteByPath(data.routes.index || [], normalized);
+  if (indexRoute) {
+    return { html: await renderWithLayout(themeDir, 'index.html', { ...data, ...indexRoute }) };
+  }
+
+  const archiveRoute = findRouteByPath(data.routes.archive || [], normalized);
+  if (archiveRoute) {
+    if (!(await fileExists(path.join(themeDir, 'archive.html')))) {
+      return { html: await render404(themeDir), notFound: true };
+    }
+    return { html: await renderWithLayout(themeDir, 'archive.html', { ...data, ...archiveRoute }) };
+  }
+
+  const categoryRoute = findRouteByPath(data.routes.categories || [], normalized);
+  if (categoryRoute) {
+    if (!(await fileExists(path.join(themeDir, 'category.html')))) {
+      return { html: await render404(themeDir), notFound: true };
+    }
+    return { html: await renderWithLayout(themeDir, 'category.html', { ...data, ...categoryRoute }) };
+  }
+
+  const tagRoute = findRouteByPath(data.routes.tags || [], normalized);
+  if (tagRoute) {
+    if (!(await fileExists(path.join(themeDir, 'tag.html')))) {
+      return { html: await render404(themeDir), notFound: true };
+    }
+    return { html: await renderWithLayout(themeDir, 'tag.html', { ...data, ...tagRoute }) };
   }
 
   const postMatch = normalized.match(/^\/posts\/([^/]+)$/);
@@ -310,43 +430,12 @@ export async function renderRoute(pathname, themeDir, data) {
   }
 
   const pageMatch = normalized.match(/^\/([^/]+)$/);
-  if (pageMatch && pageMatch[1] !== 'archive') {
+  if (pageMatch && !['archive', 'page', 'categories', 'tags', 'posts'].includes(pageMatch[1])) {
     const page = (data.content.pages || []).find((p) => p.slug === safeDecodePathSegment(pageMatch[1]));
     if (!page) {
       return { html: await render404(themeDir), notFound: true };
     }
     return { html: await renderWithLayout(themeDir, 'page.html', { ...data, page }) };
-  }
-
-  if (normalized === '/archive') {
-    if (!(await fileExists(path.join(themeDir, 'archive.html')))) {
-      return { html: await render404(themeDir), notFound: true };
-    }
-    return { html: await renderWithLayout(themeDir, 'archive.html', { ...data, ...data.routes.archive }) };
-  }
-
-  const categoryMatch = normalized.match(/^\/categories\/([^/]+)$/);
-  if (categoryMatch) {
-    if (!(await fileExists(path.join(themeDir, 'category.html')))) {
-      return { html: await render404(themeDir), notFound: true };
-    }
-    const routeData = (data.routes.categories || []).find((entry) => entry.slug === safeDecodePathSegment(categoryMatch[1]));
-    if (!routeData) {
-      return { html: await render404(themeDir), notFound: true };
-    }
-    return { html: await renderWithLayout(themeDir, 'category.html', { ...data, ...routeData }) };
-  }
-
-  const tagMatch = normalized.match(/^\/tags\/([^/]+)$/);
-  if (tagMatch) {
-    if (!(await fileExists(path.join(themeDir, 'tag.html')))) {
-      return { html: await render404(themeDir), notFound: true };
-    }
-    const routeData = (data.routes.tags || []).find((entry) => entry.slug === safeDecodePathSegment(tagMatch[1]));
-    if (!routeData) {
-      return { html: await render404(themeDir), notFound: true };
-    }
-    return { html: await renderWithLayout(themeDir, 'tag.html', { ...data, ...routeData }) };
   }
 
   return { html: await render404(themeDir), notFound: true };
@@ -456,6 +545,14 @@ function safeDecodePath(value) {
 
 function safeDecodePathSegment(value) {
   return safeDecodePath(value);
+}
+
+function normalizeRoutePath(value) {
+  return safeDecodePath(value).replace(/\/+$/, '') || '/';
+}
+
+function findRouteByPath(routes, pathname) {
+  return routes.find((entry) => normalizeRoutePath(entry.path) === pathname);
 }
 
 async function createWatchers(rootDir, onChange) {

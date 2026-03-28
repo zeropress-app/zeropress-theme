@@ -64,10 +64,10 @@ Remote URLs must use HTTPS (1 MB limit, 5-second timeout).
 
 Preview data contract:
 
-- `dev` only accepts the canonical preview-data v0.2 payload
+- `dev` only accepts the canonical preview-data v0.3 payload
 - Legacy minimal JSON payloads are rejected at startup
-- `--data` can point to a local JSON file or an HTTPS URL that returns a v0.2 payload
-- The built-in sample data also conforms to preview-data v0.2
+- `--data` can point to a local JSON file or an HTTPS URL that returns a v0.3 payload
+- The built-in sample data also conforms to preview-data v0.3
 
 Data loading rules:
 

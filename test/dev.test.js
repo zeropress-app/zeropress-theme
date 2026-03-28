@@ -42,33 +42,41 @@ function validThemeFiles() {
   };
 }
 
-test('defaultPreviewData returns a valid v0.2 payload', () => {
+test('defaultPreviewData returns a valid v0.3 payload', () => {
   assert.doesNotThrow(() => assertPreviewData(defaultPreviewData()));
 });
 
-test('renderRoute resolves canonical v0.2 routes and entities', async () => {
+test('renderRoute resolves canonical v0.3 routes and entities', async () => {
   const themeDir = await createThemeDir(validThemeFiles());
   const data = defaultPreviewData();
 
   try {
     const home = await renderRoute('/', themeDir, data);
+    const homePage2 = await renderRoute('/page/2', themeDir, data);
     const post = await renderRoute('/posts/hello-zeropress', themeDir, data);
     const page = await renderRoute('/about', themeDir, data);
     const archive = await renderRoute('/archive', themeDir, data);
+    const archivePage2 = await renderRoute('/archive/page/2', themeDir, data);
     const category = await renderRoute('/categories/general', themeDir, data);
+    const categoryPage2 = await renderRoute('/categories/general/page/2', themeDir, data);
     const tag = await renderRoute('/tags/intro', themeDir, data);
+    const tagPage2 = await renderRoute('/tags/intro/page/2', themeDir, data);
 
     assert.equal(home.notFound, undefined);
     assert.match(home.html, /ZeroPress Preview/);
     assert.match(home.html, /Preview excerpt/);
+    assert.match(homePage2.html, /Archive Patterns/);
     assert.match(post.html, /Hello ZeroPress/);
     assert.match(post.html, /Preview post content/);
     assert.match(page.html, /About/);
     assert.match(archive.html, /Archive/);
+    assert.match(archivePage2.html, /Archive Patterns/);
     assert.match(category.html, /Category/);
     assert.match(category.html, /General/);
+    assert.match(categoryPage2.html, /Archive Patterns/);
     assert.match(tag.html, /Tag/);
     assert.match(tag.html, /Intro/);
+    assert.match(tagPage2.html, /Archive Patterns/);
   } finally {
     await fs.rm(themeDir, { recursive: true, force: true });
   }
@@ -83,8 +91,10 @@ test('renderRoute matches encoded URL paths against raw Unicode slugs', async ()
   data.content.pages[0].slug = '회사-소개';
   data.content.pages[0].title = '회사 소개';
   data.routes.categories[0].slug = '무료-ai';
+  data.routes.categories[0].path = '/categories/%EB%AC%B4%EB%A3%8C-ai/';
   data.routes.categories[0].posts = '<article>카테고리 목록</article>';
   data.routes.tags[0].slug = '업데이트';
+  data.routes.tags[0].path = '/tags/%EC%97%85%EB%8D%B0%EC%9D%B4%ED%8A%B8/';
   data.routes.tags[0].posts = '<article>태그 목록</article>';
 
   try {
@@ -129,8 +139,19 @@ test('runDev rejects legacy preview data payloads', async () => {
   try {
     await assert.rejects(
       () => runDev([themeDir, '--data', dataPath]),
-      /INVALID_(VERSION|GENERATED_AT)|UNKNOWN_PROPERTY/,
+      /INVALID_(VERSION|GENERATED_AT|INDEX_ROUTES)|UNKNOWN_PROPERTY/,
     );
+  } finally {
+    await fs.rm(themeDir, { recursive: true, force: true });
+  }
+});
+
+test('renderRoute returns 404 for unknown paginated routes', async () => {
+  const themeDir = await createThemeDir(validThemeFiles());
+
+  try {
+    const result = await renderRoute('/page/99', themeDir, defaultPreviewData());
+    assert.equal(result.notFound, true);
   } finally {
     await fs.rm(themeDir, { recursive: true, force: true });
   }
