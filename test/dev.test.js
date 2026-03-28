@@ -74,6 +74,38 @@ test('renderRoute resolves canonical v0.2 routes and entities', async () => {
   }
 });
 
+test('renderRoute matches encoded URL paths against raw Unicode slugs', async () => {
+  const themeDir = await createThemeDir(validThemeFiles());
+  const data = defaultPreviewData();
+
+  data.content.posts[0].slug = '헬로우-월드';
+  data.content.posts[0].title = '한글 포스트';
+  data.content.pages[0].slug = '회사-소개';
+  data.content.pages[0].title = '회사 소개';
+  data.routes.categories[0].slug = '무료-ai';
+  data.routes.categories[0].posts = '<article>카테고리 목록</article>';
+  data.routes.tags[0].slug = '업데이트';
+  data.routes.tags[0].posts = '<article>태그 목록</article>';
+
+  try {
+    const post = await renderRoute('/posts/%ED%97%AC%EB%A1%9C%EC%9A%B0-%EC%9B%94%EB%93%9C', themeDir, data);
+    const page = await renderRoute('/%ED%9A%8C%EC%82%AC-%EC%86%8C%EA%B0%9C', themeDir, data);
+    const category = await renderRoute('/categories/%EB%AC%B4%EB%A3%8C-ai', themeDir, data);
+    const tag = await renderRoute('/tags/%EC%97%85%EB%8D%B0%EC%9D%B4%ED%8A%B8', themeDir, data);
+
+    assert.equal(post.notFound, undefined);
+    assert.equal(page.notFound, undefined);
+    assert.equal(category.notFound, undefined);
+    assert.equal(tag.notFound, undefined);
+    assert.match(post.html, /한글 포스트/);
+    assert.match(page.html, /회사 소개/);
+    assert.match(category.html, /카테고리 목록/);
+    assert.match(tag.html, /태그 목록/);
+  } finally {
+    await fs.rm(themeDir, { recursive: true, force: true });
+  }
+});
+
 test('runDev rejects legacy preview data payloads', async () => {
   const themeDir = await createThemeDir(validThemeFiles());
   const dataPath = path.join(themeDir, 'legacy-preview.json');

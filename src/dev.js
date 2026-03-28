@@ -271,7 +271,7 @@ export function defaultPreviewData() {
 async function handleRequest(req, res, themeDir, data) {
   try {
     const url = new URL(req.url, 'http://localhost');
-    const pathname = decodeURIComponent(url.pathname);
+    const pathname = safeDecodePath(url.pathname);
 
     if (pathname.startsWith('/assets/')) {
       const assetPath = path.join(themeDir, pathname);
@@ -294,7 +294,7 @@ async function handleRequest(req, res, themeDir, data) {
 }
 
 export async function renderRoute(pathname, themeDir, data) {
-  const normalized = pathname.replace(/\/+$/, '') || '/';
+  const normalized = safeDecodePath(pathname).replace(/\/+$/, '') || '/';
 
   if (normalized === '/') {
     return { html: await renderWithLayout(themeDir, 'index.html', { ...data, ...data.routes.index }) };
@@ -302,7 +302,7 @@ export async function renderRoute(pathname, themeDir, data) {
 
   const postMatch = normalized.match(/^\/posts\/([^/]+)$/);
   if (postMatch) {
-    const post = (data.content.posts || []).find((p) => p.slug === postMatch[1]);
+    const post = (data.content.posts || []).find((p) => p.slug === safeDecodePathSegment(postMatch[1]));
     if (!post) {
       return { html: await render404(themeDir), notFound: true };
     }
@@ -311,7 +311,7 @@ export async function renderRoute(pathname, themeDir, data) {
 
   const pageMatch = normalized.match(/^\/([^/]+)$/);
   if (pageMatch && pageMatch[1] !== 'archive') {
-    const page = (data.content.pages || []).find((p) => p.slug === pageMatch[1]);
+    const page = (data.content.pages || []).find((p) => p.slug === safeDecodePathSegment(pageMatch[1]));
     if (!page) {
       return { html: await render404(themeDir), notFound: true };
     }
@@ -330,7 +330,7 @@ export async function renderRoute(pathname, themeDir, data) {
     if (!(await fileExists(path.join(themeDir, 'category.html')))) {
       return { html: await render404(themeDir), notFound: true };
     }
-    const routeData = (data.routes.categories || []).find((entry) => entry.slug === categoryMatch[1]);
+    const routeData = (data.routes.categories || []).find((entry) => entry.slug === safeDecodePathSegment(categoryMatch[1]));
     if (!routeData) {
       return { html: await render404(themeDir), notFound: true };
     }
@@ -342,7 +342,7 @@ export async function renderRoute(pathname, themeDir, data) {
     if (!(await fileExists(path.join(themeDir, 'tag.html')))) {
       return { html: await render404(themeDir), notFound: true };
     }
-    const routeData = (data.routes.tags || []).find((entry) => entry.slug === tagMatch[1]);
+    const routeData = (data.routes.tags || []).find((entry) => entry.slug === safeDecodePathSegment(tagMatch[1]));
     if (!routeData) {
       return { html: await render404(themeDir), notFound: true };
     }
@@ -444,6 +444,18 @@ async function fileExists(filePath) {
   } catch {
     return false;
   }
+}
+
+function safeDecodePath(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function safeDecodePathSegment(value) {
+  return safeDecodePath(value);
 }
 
 async function createWatchers(rootDir, onChange) {
