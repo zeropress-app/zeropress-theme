@@ -146,6 +146,19 @@ test('runDev rejects legacy preview data payloads', async () => {
   }
 });
 
+test('runDev rejects remote preview data URLs', async () => {
+  const themeDir = await createThemeDir(validThemeFiles());
+
+  try {
+    await assert.rejects(
+      () => runDev([themeDir, '--data', 'https://signed-url/preview.json']),
+      /--data must be a local JSON file path/,
+    );
+  } finally {
+    await fs.rm(themeDir, { recursive: true, force: true });
+  }
+});
+
 test('renderRoute returns 404 for unknown paginated routes', async () => {
   const themeDir = await createThemeDir(validThemeFiles());
 

@@ -15,6 +15,3 @@ export const EXCLUDE_DEFAULTS = new Set([
   'yarn.lock',
   'bun.lockb',
 ]);
-
-export const MAX_REMOTE_DATA_BYTES = 1024 * 1024;
-export const REMOTE_TIMEOUT_MS = 5000;

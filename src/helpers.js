@@ -46,14 +46,6 @@ export async function exists(filePath) {
   }
 }
 
-export function isHttpUrl(value) {
-  return typeof value === 'string' && /^https?:\/\//i.test(value);
-}
-
-export function isHttpsUrl(value) {
-  return typeof value === 'string' && /^https:\/\//i.test(value);
-}
-
 export function normalizeSlashes(value) {
   return value.replace(/\\/g, '/');
 }

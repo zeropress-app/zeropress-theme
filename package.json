@@ -1,5 +1,5 @@
 {
-  "name": "zeropress-theme",
+  "name": "@zeropress/theme",
   "version": "0.1.10",
   "description": "ZeroPress theme developer toolkit",
   "type": "module",

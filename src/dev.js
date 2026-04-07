@@ -5,8 +5,7 @@ import http from 'node:http';
 import { spawn } from 'node:child_process';
 import { WebSocketServer } from 'ws';
 import { PREVIEW_DATA_VERSION, assertPreviewData } from '@zeropress/preview-data-validator';
-import { MAX_REMOTE_DATA_BYTES, REMOTE_TIMEOUT_MS } from './constants.js';
-import { getThemeDir, isHttpUrl, isHttpsUrl } from './helpers.js';
+import { getThemeDir } from './helpers.js';
 import { validateThemeDirectory } from './validate.js';
 
 export async function runDev(argv) {
@@ -14,13 +13,12 @@ export async function runDev(argv) {
   const themeDir = getThemeDir(positional[0]);
   const host = flags.host || '127.0.0.1';
   const port = Number(flags.port || 4321);
-  const noJsCheck = flags['no-js-check'] === true;
 
   if (!Number.isInteger(port) || port <= 0) {
     throw new Error(`Invalid port: ${flags.port}`);
   }
 
-  const validation = await validateThemeDirectory(themeDir, { noJsCheck });
+  const validation = await validateThemeDirectory(themeDir);
   if (validation.errors.length > 0) {
     throw new Error(`Theme validation failed before dev start (${validation.errors.length} errors)`);
   }
@@ -46,11 +44,9 @@ export async function runDev(argv) {
   });
 
   const watchers = await createWatchers(themeDir, async () => {
-    if (!noJsCheck) {
-      const quick = await validateThemeDirectory(themeDir, { noJsCheck: false });
-      if (quick.errors.length > 0) {
-        console.log(`[dev] validation errors on change: ${quick.errors.length}`);
-      }
+    const quick = await validateThemeDirectory(themeDir);
+    if (quick.errors.length > 0) {
+      console.log(`[dev] validation errors on change: ${quick.errors.length}`);
     }
 
     for (const client of wss.clients) {
@@ -113,7 +109,7 @@ function parseDevArgs(argv) {
     }
 
     const key = token.slice(2);
-    if (key === 'open' || key === 'no-js-check') {
+    if (key === 'open') {
       flags[key] = true;
       continue;
     }
@@ -165,27 +161,8 @@ export async function loadPreviewData(dataArg) {
     return defaultPreviewData();
   }
 
-  if (isHttpUrl(dataArg)) {
-    if (!isHttpsUrl(dataArg)) {
-      throw new Error('--data URL must use https');
-    }
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), REMOTE_TIMEOUT_MS);
-
-    try {
-      const response = await fetch(dataArg, { redirect: 'follow', signal: controller.signal });
-      if (!response.ok) {
-        throw new Error(`Failed to fetch preview data (${response.status})`);
-      }
-      const raw = new Uint8Array(await response.arrayBuffer());
-      if (raw.byteLength > MAX_REMOTE_DATA_BYTES) {
-        throw new Error('Remote preview JSON exceeds 1MB limit');
-      }
-      return JSON.parse(new TextDecoder().decode(raw));
-    } finally {
-      clearTimeout(timeout);
-    }
+  if (/^https?:\/\//i.test(dataArg)) {
+    throw new Error('--data must be a local JSON file path');
   }
 
   const localPath = path.resolve(process.cwd(), dataArg);

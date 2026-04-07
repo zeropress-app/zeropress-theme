@@ -11,7 +11,7 @@ export async function runPack(argv) {
   const outDir = path.resolve(process.cwd(), flags.out || 'dist');
   const dryRun = flags['dry-run'] === true;
 
-  const preValidation = await validateThemeDirectory(themeDir, { noJsCheck: false });
+  const preValidation = await validateThemeDirectory(themeDir);
   if (preValidation.errors.length > 0) {
     throw new Error(`Pack aborted: validate failed with ${preValidation.errors.length} error(s)`);
   }
@@ -71,7 +71,7 @@ export async function runPack(argv) {
   const buffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
   await fs.writeFile(zipPath, buffer);
 
-  const postValidation = await validateZipFile(zipPath, { noJsCheck: false });
+  const postValidation = await validateZipFile(zipPath);
   if (postValidation.errors.length > 0) {
     await fs.unlink(zipPath).catch(() => {});
     throw new Error(`Pack aborted: generated zip re-validation failed with ${postValidation.errors.length} error(s)`);

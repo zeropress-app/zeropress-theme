@@ -10,8 +10,8 @@ export async function runValidate(argv) {
   const json = flags.json === true;
   const target = await resolveValidationTarget(targetPath);
   const result = target.type === 'zip'
-    ? await validateZipFile(target.path, { noJsCheck: false })
-    : await validateThemeDirectory(target.path, { noJsCheck: false });
+    ? await validateZipFile(target.path)
+    : await validateThemeDirectory(target.path);
 
   if (json) {
     process.stdout.write(`${JSON.stringify(toJsonOutput(result), null, 2)}\n`);
@@ -52,7 +52,7 @@ function parseValidateArgs(argv) {
   return { positional, flags };
 }
 
-export async function validateThemeDirectory(themeDir, options = {}) {
+export async function validateThemeDirectory(themeDir) {
   const allEntries = await walkDirectory(themeDir);
   const rootRealPath = await fs.realpath(themeDir);
   const files = new Map();
@@ -73,17 +73,14 @@ export async function validateThemeDirectory(themeDir, options = {}) {
   }
 
   return validateThemeFiles(files, {
-    noJsCheck: options.noJsCheck === true,
     pathEntries,
     checkedFiles: allEntries.filter((item) => item.entry.isFile()).length,
   });
 }
 
-export async function validateZipFile(zipPath, options = {}) {
+export async function validateZipFile(zipPath) {
   const raw = await fs.readFile(zipPath);
-  return validateThemeZip(raw, {
-    noJsCheck: options.noJsCheck === true,
-  });
+  return validateThemeZip(raw);
 }
 
 async function resolveValidationTarget(inputPath) {

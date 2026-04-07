@@ -1,8 +1,8 @@
-# zeropress-theme
+# @zeropress/theme
 
-![npm](https://img.shields.io/npm/v/zeropress-theme)
-![license](https://img.shields.io/npm/l/zeropress-theme)
-![node](https://img.shields.io/node/v/zeropress-theme)
+![npm](https://img.shields.io/npm/v/%40zeropress%2Ftheme)
+![license](https://img.shields.io/npm/l/%40zeropress%2Ftheme)
+![node](https://img.shields.io/node/v/%40zeropress%2Ftheme)
 
 Developer toolkit for building, validating, and packaging ZeroPress themes.
 
@@ -11,12 +11,13 @@ Developer toolkit for building, validating, and packaging ZeroPress themes.
 ## Install
 
 ```bash
-# Run directly with npx
-npx zeropress-theme <command>
-npx zeropress-theme --help
+# Run directly with npx (package name)
+npx @zeropress/theme <command>
+npx @zeropress/theme --help
 
-# Or install globally
-npm install -g zeropress-theme
+# Or install globally, then use the zeropress-theme binary
+npm install -g @zeropress/theme
+zeropress-theme --help
 ```
 
 * * *
@@ -27,7 +28,7 @@ Commands
 ### dev — Preview Server
 
 ```bash
-npx zeropress-theme dev [themeDir] [options]
+npx @zeropress/theme dev [themeDir] [options]
 ```
 
 Launches a local preview server with WebSocket-based live reload.
@@ -42,39 +43,32 @@ Behavior highlights:
 | --- | --- | --- |
 | `--port <number>` | Server port | `4321` |
 | `--host <ip>` | Bind address | `127.0.0.1` |
-| `--data <path-or-url>` | Preview data JSON (local path or HTTPS URL) | Built-in sample data |
+| `--data <path>` | Preview data JSON file path | Built-in sample data |
 | `--open` | Open browser automatically | — |
-| `--no-js-check` | Skip JS-related checks | — |
 
 Examples:
 
 ```bash
 # Preview current directory
-npx zeropress-theme dev
+npx @zeropress/theme dev
 
 # Preview specific theme with custom data
-npx zeropress-theme dev ./my-theme --data ./preview.json
-
-# Use remote preview data
-npx zeropress-theme dev ./my-theme --data https://signed-url/preview.json
+npx @zeropress/theme dev ./my-theme --data ./preview.json
 ```
 
-If `--data` is omitted, built-in sample data is used.  
-Remote URLs must use HTTPS (1 MB limit, 5-second timeout).
+If `--data` is omitted, built-in sample data is used.
 
 Preview data contract:
 
 - `dev` only accepts the canonical preview-data v0.3 payload
 - Legacy minimal JSON payloads are rejected at startup
-- `--data` can point to a local JSON file or an HTTPS URL that returns a v0.3 payload
+- `--data` must point to a local JSON file that contains a v0.3 payload
 - The built-in sample data also conforms to preview-data v0.3
 
 Data loading rules:
 
-- Local file path and HTTPS URL are both supported
-- Redirects are allowed
-- No retry on fetch failure
-- Download or JSON parse failure aborts `dev` startup
+- Only local file paths are supported
+- JSON parse failure aborts `dev` startup
 
 Template variable note:
 
@@ -85,7 +79,7 @@ Template variable note:
 ### validate — Theme Validation
 
 ```bash
-npx zeropress-theme validate [themeDir|theme.zip] [options]
+npx @zeropress/theme validate [themeDir|theme.zip] [options]
 ```
 
 Validates a theme directory or packaged zip against the ZeroPress Theme Runtime v0.2 contract.
@@ -94,10 +88,10 @@ Examples:
 
 ```bash
 # Validate a theme directory
-npx zeropress-theme validate ./my-theme
+npx @zeropress/theme validate ./my-theme
 
 # Validate a packaged zip
-npx zeropress-theme validate ./dist/my-theme-1.0.0.zip
+npx @zeropress/theme validate ./dist/my-theme-1.0.0.zip
 ```
 
 Options:
@@ -141,7 +135,7 @@ With `--strict`, warnings result in exit code `1`.
 ### pack — Zip Packaging
 
 ```bash
-npx zeropress-theme pack [themeDir] [options]
+npx @zeropress/theme pack [themeDir] [options]
 ```
 
 Creates an upload-ready zip file.
@@ -170,10 +164,10 @@ CI Usage
 --------
 
 ```bash
-npx zeropress-theme validate ./theme --strict
-npx zeropress-theme validate ./artifacts/theme-1.0.0.zip --strict
-npx zeropress-theme pack ./theme --dry-run
-npx zeropress-theme pack ./theme --out ./artifacts
+npx @zeropress/theme validate ./theme --strict
+npx @zeropress/theme validate ./artifacts/theme-1.0.0.zip --strict
+npx @zeropress/theme pack ./theme --dry-run
+npx @zeropress/theme pack ./theme --out ./artifacts
 ```
 
 * * *
