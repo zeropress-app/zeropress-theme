@@ -19,12 +19,17 @@ async function createThemeDir(files) {
   return root;
 }
 
-async function createZipFile(files, zipName = 'theme.zip') {
+async function createZipFile(files, options = {}) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-theme-zip-'));
-  const zipPath = path.join(root, zipName);
+  const zipPath = path.join(root, options.zipName || 'theme.zip');
   const zip = new JSZip();
+  const prefix = options.prefix || '';
 
   for (const [relativePath, content] of Object.entries(files)) {
+    zip.file(`${prefix}${relativePath}`, content);
+  }
+
+  for (const [relativePath, content] of Object.entries(options.extraFiles || {})) {
     zip.file(relativePath, content);
   }
 
@@ -104,6 +109,68 @@ test('runValidate accepts a valid zip file path', async () => {
   try {
     const code = await runValidate([zipPath]);
     assert.equal(code, 0);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test('runValidate accepts a valid single-folder zip file path', async () => {
+  const files = {
+    ...validThemeFiles(),
+    'archive.html': '<section>archive</section>',
+    'category.html': '<section>category</section>',
+    'tag.html': '<section>tag</section>',
+  };
+  const { root, zipPath } = await createZipFile(files, { prefix: 'my-theme/' });
+
+  try {
+    const code = await runValidate([zipPath]);
+    assert.equal(code, 0);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test('runValidate accepts a zip file with macOS metadata', async () => {
+  const files = {
+    ...validThemeFiles(),
+    'archive.html': '<section>archive</section>',
+    'category.html': '<section>category</section>',
+    'tag.html': '<section>tag</section>',
+  };
+  const { root, zipPath } = await createZipFile(files, {
+    prefix: 'my-theme/',
+    extraFiles: {
+      '__MACOSX/my-theme/._theme.json': 'metadata',
+      '__MACOSX/._my-theme': 'metadata',
+    },
+  });
+
+  try {
+    const code = await runValidate([zipPath]);
+    assert.equal(code, 2);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test('runValidate rejects a mixed multi-root zip file path', async () => {
+  const files = {
+    ...validThemeFiles(),
+    'archive.html': '<section>archive</section>',
+    'category.html': '<section>category</section>',
+    'tag.html': '<section>tag</section>',
+  };
+  const { root, zipPath } = await createZipFile(files, {
+    prefix: 'theme-a/',
+    extraFiles: {
+      'theme-b/other.txt': 'other',
+    },
+  });
+
+  try {
+    const code = await runValidate([zipPath]);
+    assert.equal(code, 1);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }

@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { validateThemeFiles, validateThemeZip } from '@zeropress/theme-validator';
+import JSZip from 'jszip';
+import { validateThemeFiles } from '@zeropress/theme-validator';
 import { getThemeDir, walkDirectory } from './helpers.js';
 
 export async function runValidate(argv) {
@@ -80,7 +81,39 @@ export async function validateThemeDirectory(themeDir) {
 
 export async function validateZipFile(zipPath) {
   const raw = await fs.readFile(zipPath);
-  return validateThemeZip(raw);
+  const zip = await JSZip.loadAsync(raw);
+  const analysis = analyzeZipLayout(Object.keys(zip.files).filter((filePath) => !zip.files[filePath].dir));
+  if (analysis.error) {
+    return {
+      ok: false,
+      errors: [createIssue('INVALID_ZIP_ROOT', 'theme.zip', analysis.error, 'error')],
+      warnings: [],
+      manifest: undefined,
+      checkedFiles: analysis.checkedFiles,
+    };
+  }
+
+  const files = new Map();
+  await Promise.all(
+    analysis.normalizedFilePaths.map(async (normalizedPath) => {
+      const file = zip.file(normalizedPath);
+      if (!file || file.dir) {
+        return;
+      }
+      const relativePath = analysis.relativePathByZipPath.get(normalizedPath) || normalizedPath;
+      files.set(relativePath, await file.async('uint8array'));
+    }),
+  );
+
+  const result = await validateThemeFiles(files, {
+    checkedFiles: analysis.checkedFiles,
+  });
+  return {
+    ...result,
+    warnings: analysis.ignoredMacOsMetadata
+      ? [createIssue('MACOS_METADATA_IGNORED', 'theme.zip', 'macOS metadata files (__MACOSX, ._*) were ignored', 'warning'), ...result.warnings]
+      : result.warnings,
+  };
 }
 
 async function resolveValidationTarget(inputPath) {
@@ -125,4 +158,76 @@ function toJsonOutput(result) {
       timestamp: new Date().toISOString(),
     },
   };
+}
+
+function analyzeZipLayout(filePaths) {
+  const normalizedFilePaths = filePaths
+    .map((filePath) => normalizeZipPath(String(filePath)))
+    .filter(Boolean);
+  const filteredFilePaths = normalizedFilePaths.filter((filePath) => !isIgnorableMacOsMetadata(filePath));
+  const ignoredMacOsMetadata = filteredFilePaths.length !== normalizedFilePaths.length;
+
+  if (filteredFilePaths.includes('theme.json')) {
+    return createZipLayoutAnalysis(filteredFilePaths, '', ignoredMacOsMetadata);
+  }
+
+  const rootLevelEntries = filteredFilePaths.filter((filePath) => !filePath.includes('/'));
+  if (rootLevelEntries.length > 0) {
+    return createZipLayoutAnalysis(filteredFilePaths, '', ignoredMacOsMetadata);
+  }
+
+  const topLevels = new Set(filteredFilePaths.map((filePath) => filePath.split('/')[0]).filter(Boolean));
+  if (topLevels.size === 1) {
+    const folder = [...topLevels][0];
+    if (filteredFilePaths.includes(`${folder}/theme.json`)) {
+      return createZipLayoutAnalysis(filteredFilePaths, `${folder}/`, ignoredMacOsMetadata);
+    }
+  }
+
+  if (filteredFilePaths.some((filePath) => filePath.endsWith('/theme.json'))) {
+    return {
+      error: 'Theme package must be root-flat or wrapped in a single top-level folder',
+      ignoredMacOsMetadata,
+      checkedFiles: filteredFilePaths.length,
+      normalizedFilePaths: filteredFilePaths,
+      relativePathByZipPath: new Map(),
+    };
+  }
+
+  return createZipLayoutAnalysis(filteredFilePaths, '', ignoredMacOsMetadata);
+}
+
+function createZipLayoutAnalysis(normalizedFilePaths, basePrefix, ignoredMacOsMetadata) {
+  const relativePathByZipPath = new Map();
+
+  for (const normalizedPath of normalizedFilePaths) {
+    const relativePath = basePrefix && normalizedPath.startsWith(basePrefix)
+      ? normalizedPath.slice(basePrefix.length)
+      : normalizedPath;
+    relativePathByZipPath.set(normalizedPath, relativePath);
+  }
+
+  return {
+    error: null,
+    ignoredMacOsMetadata,
+    checkedFiles: normalizedFilePaths.length,
+    normalizedFilePaths,
+    relativePathByZipPath,
+  };
+}
+
+function isIgnorableMacOsMetadata(filePath) {
+  if (filePath.startsWith('__MACOSX/')) {
+    return true;
+  }
+
+  return filePath.split('/').some((segment) => segment.startsWith('._'));
+}
+
+function normalizeZipPath(filePath) {
+  return filePath.replace(/\\/g, '/').replace(/^\.\/+/, '');
+}
+
+function createIssue(code, issuePath, message, severity) {
+  return { code, path: issuePath, message, severity };
 }
