@@ -35,5 +35,8 @@ function printHelp() {
 Usage:
   zeropress-theme dev [themeDir] [--port <n>] [--host <ip>] [--data <path>] [--open]
   zeropress-theme validate [themeDir|theme.zip] [--strict] [--json]
-  zeropress-theme pack [themeDir] [--out <dir>] [--name <zipFile>] [--dry-run]`);
+  zeropress-theme pack [themeDir] [--out <dir>] [--name <zipFile>] [--dry-run]
+
+Notes:
+  dev expects canonical preview-data v0.4 JSON.`);
 }

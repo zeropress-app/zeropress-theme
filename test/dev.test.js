@@ -4,7 +4,14 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { assertPreviewData } from '@zeropress/preview-data-validator';
-import { defaultPreviewData, normalizeListenError, renderRoute, runDev } from '../src/dev.js';
+import {
+  buildDevSnapshot,
+  defaultPreviewData,
+  normalizeListenError,
+  rebuildDevSnapshot,
+  resolveSnapshotResponse,
+  runDev,
+} from '../src/dev.js';
 
 async function createThemeDir(files) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-theme-dev-'));
@@ -36,110 +43,141 @@ function validThemeFiles() {
     'archive.html': '<section><h1>Archive</h1><div>{{posts}}</div><div>{{pagination}}</div></section>',
     'category.html': '<section><h1>Category</h1><div>{{posts}}</div><div>{{categories}}</div><div>{{pagination}}</div></section>',
     'tag.html': '<section><h1>Tag</h1><div>{{posts}}</div><div>{{tags}}</div><div>{{pagination}}</div></section>',
+    '404.html': '<section><h1>Custom 404</h1><p>Missing route</p></section>',
     'partials/header.html': '<header>Header</header>',
     'partials/footer.html': '<footer>Footer</footer>',
     'assets/style.css': 'body { color: black; }',
   };
 }
 
-test('defaultPreviewData returns a valid v0.3 payload', () => {
+function responseText(response) {
+  return typeof response.body === 'string'
+    ? response.body
+    : Buffer.from(response.body).toString('utf8');
+}
+
+test('defaultPreviewData returns a valid v0.4 payload', () => {
   assert.doesNotThrow(() => assertPreviewData(defaultPreviewData()));
 });
 
-test('renderRoute resolves canonical v0.3 routes and entities', async () => {
+test('buildDevSnapshot serves canonical v0.4 routes, assets, and special files', async () => {
   const themeDir = await createThemeDir(validThemeFiles());
-  const data = defaultPreviewData();
 
   try {
-    const home = await renderRoute('/', themeDir, data);
-    const homePage2 = await renderRoute('/page/2', themeDir, data);
-    const post = await renderRoute('/posts/hello-zeropress', themeDir, data);
-    const page = await renderRoute('/about', themeDir, data);
-    const archive = await renderRoute('/archive', themeDir, data);
-    const archivePage2 = await renderRoute('/archive/page/2', themeDir, data);
-    const category = await renderRoute('/categories/general', themeDir, data);
-    const categoryPage2 = await renderRoute('/categories/general/page/2', themeDir, data);
-    const tag = await renderRoute('/tags/intro', themeDir, data);
-    const tagPage2 = await renderRoute('/tags/intro/page/2', themeDir, data);
+    const snapshot = await buildDevSnapshot({ themeDir, previewData: defaultPreviewData() });
 
-    assert.equal(home.notFound, undefined);
-    assert.match(home.html, /ZeroPress Preview/);
-    assert.match(home.html, /Preview excerpt/);
-    assert.match(homePage2.html, /Archive Patterns/);
-    assert.match(post.html, /Hello ZeroPress/);
-    assert.match(post.html, /Preview post content/);
-    assert.match(page.html, /About/);
-    assert.match(archive.html, /Archive/);
-    assert.match(archivePage2.html, /Archive Patterns/);
-    assert.match(category.html, /Category/);
-    assert.match(category.html, /General/);
-    assert.match(categoryPage2.html, /Archive Patterns/);
-    assert.match(tag.html, /Tag/);
-    assert.match(tag.html, /Intro/);
-    assert.match(tagPage2.html, /Archive Patterns/);
+    const home = resolveSnapshotResponse('/', snapshot);
+    const homePage2 = resolveSnapshotResponse('/page/2', snapshot);
+    const post = resolveSnapshotResponse('/posts/hello-zeropress', snapshot);
+    const page = resolveSnapshotResponse('/about', snapshot);
+    const archive = resolveSnapshotResponse('/archive', snapshot);
+    const archivePage2 = resolveSnapshotResponse('/archive/page/2', snapshot);
+    const category = resolveSnapshotResponse('/categories/general', snapshot);
+    const categoryPage2 = resolveSnapshotResponse('/categories/general/page/2', snapshot);
+    const tag = resolveSnapshotResponse('/tags/intro', snapshot);
+    const tagPage2 = resolveSnapshotResponse('/tags/intro/page/2', snapshot);
+    const asset = resolveSnapshotResponse('/assets/style.css', snapshot);
+    const robots = resolveSnapshotResponse('/robots.txt', snapshot);
+
+    assert.equal(home.status, 200);
+    assert.match(responseText(home), /ZeroPress Preview/);
+    assert.match(responseText(home), /Preview excerpt/);
+    assert.match(responseText(homePage2), /Archive Patterns/);
+    assert.match(responseText(post), /Hello ZeroPress/);
+    assert.match(responseText(post), /Preview post content/);
+    assert.match(responseText(page), /About/);
+    assert.match(responseText(archive), /Archive/);
+    assert.match(responseText(archivePage2), /Archive Patterns/);
+    assert.match(responseText(category), /Category/);
+    assert.match(responseText(category), /General \(3\)/);
+    assert.match(responseText(categoryPage2), /Archive Patterns/);
+    assert.match(responseText(tag), /Tag/);
+    assert.match(responseText(tag), /Intro \(3\)/);
+    assert.match(responseText(tagPage2), /Archive Patterns/);
+    assert.equal(asset.status, 200);
+    assert.match(responseText(asset), /body\{color:black\}/);
+    assert.equal(robots.status, 200);
+    assert.match(responseText(robots), /User-agent:/);
   } finally {
     await fs.rm(themeDir, { recursive: true, force: true });
   }
 });
 
-test('renderRoute matches encoded URL paths against raw Unicode slugs', async () => {
+test('buildDevSnapshot matches encoded request paths against encoded output paths', async () => {
   const themeDir = await createThemeDir(validThemeFiles());
   const data = defaultPreviewData();
 
   data.content.posts[0].slug = '헬로우-월드';
   data.content.posts[0].title = '한글 포스트';
+  data.content.posts[0].category_slugs = ['무료-ai'];
+  data.content.posts[0].tag_slugs = ['업데이트'];
+  data.content.posts[1].category_slugs = ['무료-ai'];
+  data.content.posts[1].tag_slugs = ['업데이트'];
+  data.content.posts[2].category_slugs = ['무료-ai'];
+  data.content.posts[2].tag_slugs = ['업데이트'];
   data.content.pages[0].slug = '회사-소개';
   data.content.pages[0].title = '회사 소개';
-  data.routes.categories[0].slug = '무료-ai';
-  data.routes.categories[0].path = '/categories/%EB%AC%B4%EB%A3%8C-ai/';
-  data.routes.categories[0].posts = '<article>카테고리 목록</article>';
-  data.routes.tags[0].slug = '업데이트';
-  data.routes.tags[0].path = '/tags/%EC%97%85%EB%8D%B0%EC%9D%B4%ED%8A%B8/';
-  data.routes.tags[0].posts = '<article>태그 목록</article>';
+  data.content.categories[0].slug = '무료-ai';
+  data.content.categories[0].name = '무료 AI';
+  data.content.tags[0].slug = '업데이트';
+  data.content.tags[0].name = '업데이트';
 
   try {
-    const post = await renderRoute('/posts/%ED%97%AC%EB%A1%9C%EC%9A%B0-%EC%9B%94%EB%93%9C', themeDir, data);
-    const page = await renderRoute('/%ED%9A%8C%EC%82%AC-%EC%86%8C%EA%B0%9C', themeDir, data);
-    const category = await renderRoute('/categories/%EB%AC%B4%EB%A3%8C-ai', themeDir, data);
-    const tag = await renderRoute('/tags/%EC%97%85%EB%8D%B0%EC%9D%B4%ED%8A%B8', themeDir, data);
+    const snapshot = await buildDevSnapshot({ themeDir, previewData: data });
 
-    assert.equal(post.notFound, undefined);
-    assert.equal(page.notFound, undefined);
-    assert.equal(category.notFound, undefined);
-    assert.equal(tag.notFound, undefined);
-    assert.match(post.html, /한글 포스트/);
-    assert.match(page.html, /회사 소개/);
-    assert.match(category.html, /카테고리 목록/);
-    assert.match(tag.html, /태그 목록/);
+    const post = resolveSnapshotResponse('/posts/%ED%97%AC%EB%A1%9C%EC%9A%B0-%EC%9B%94%EB%93%9C', snapshot);
+    const page = resolveSnapshotResponse('/%ED%9A%8C%EC%82%AC-%EC%86%8C%EA%B0%9C', snapshot);
+    const category = resolveSnapshotResponse('/categories/%EB%AC%B4%EB%A3%8C-ai', snapshot);
+    const tag = resolveSnapshotResponse('/tags/%EC%97%85%EB%8D%B0%EC%9D%B4%ED%8A%B8', snapshot);
+
+    assert.equal(post.status, 200);
+    assert.equal(page.status, 200);
+    assert.equal(category.status, 200);
+    assert.equal(tag.status, 200);
+    assert.match(responseText(post), /한글 포스트/);
+    assert.match(responseText(page), /회사 소개/);
+    assert.match(responseText(category), /무료 AI \(3\)/);
+    assert.match(responseText(tag), /업데이트 \(3\)/);
   } finally {
     await fs.rm(themeDir, { recursive: true, force: true });
   }
 });
 
-test('runDev rejects legacy preview data payloads', async () => {
+test('runDev rejects v0.3 preview data payloads', async () => {
   const themeDir = await createThemeDir(validThemeFiles());
   const dataPath = path.join(themeDir, 'legacy-preview.json');
 
   await fs.writeFile(
     dataPath,
     JSON.stringify({
+      version: '0.3',
+      generator: 'legacy-tool',
+      generated_at: '2026-03-26T00:00:00.000Z',
       site: {
         title: 'Legacy',
         description: 'Legacy payload',
         url: 'https://example.com',
         language: 'en',
       },
-      posts: [],
-      pages: [],
-      categories: [],
-      tags: [],
+      content: {
+        posts: [],
+        pages: [],
+        categories: [],
+        tags: [],
+      },
+      routes: {
+        index: [],
+        archive: [],
+        categories: [],
+        tags: [],
+      },
     }),
   );
 
   try {
     await assert.rejects(
       () => runDev([themeDir, '--data', dataPath]),
-      /INVALID_(VERSION|GENERATED_AT|INDEX_ROUTES)|UNKNOWN_PROPERTY/,
+      /0\.4|routes|locale|postsPerPage|dateFormat|disallowComments|category_slugs|tag_slugs|INVALID_|UNKNOWN_PROPERTY/,
     );
   } finally {
     await fs.rm(themeDir, { recursive: true, force: true });
@@ -159,12 +197,68 @@ test('runDev rejects remote preview data URLs', async () => {
   }
 });
 
-test('renderRoute returns 404 for unknown paginated routes', async () => {
+test('resolveSnapshotResponse returns custom 404 or built-in fallback for missing routes', async () => {
   const themeDir = await createThemeDir(validThemeFiles());
+  const filesWithout404 = validThemeFiles();
+  delete filesWithout404['404.html'];
+  const themeDirWithout404 = await createThemeDir(filesWithout404);
 
   try {
-    const result = await renderRoute('/page/99', themeDir, defaultPreviewData());
-    assert.equal(result.notFound, true);
+    const customSnapshot = await buildDevSnapshot({ themeDir, previewData: defaultPreviewData() });
+    const builtInSnapshot = await buildDevSnapshot({
+      themeDir: themeDirWithout404,
+      previewData: defaultPreviewData(),
+    });
+
+    const customNotFound = resolveSnapshotResponse('/page/99', customSnapshot);
+    const builtInNotFound = resolveSnapshotResponse('/page/99', builtInSnapshot);
+
+    assert.equal(customNotFound.status, 404);
+    assert.match(responseText(customNotFound), /Custom 404/);
+    assert.equal(builtInNotFound.status, 404);
+    assert.equal(responseText(builtInNotFound), '<!doctype html><html><body><h1>404</h1><p>Not Found</p></body></html>');
+  } finally {
+    await fs.rm(themeDir, { recursive: true, force: true });
+    await fs.rm(themeDirWithout404, { recursive: true, force: true });
+  }
+});
+
+test('optional route outputs return 404 when their templates are missing', async () => {
+  const files = validThemeFiles();
+  delete files['archive.html'];
+  delete files['category.html'];
+  delete files['tag.html'];
+  const themeDir = await createThemeDir(files);
+
+  try {
+    const snapshot = await buildDevSnapshot({ themeDir, previewData: defaultPreviewData() });
+
+    assert.equal(resolveSnapshotResponse('/archive', snapshot).status, 404);
+    assert.equal(resolveSnapshotResponse('/categories/general', snapshot).status, 404);
+    assert.equal(resolveSnapshotResponse('/tags/intro', snapshot).status, 404);
+  } finally {
+    await fs.rm(themeDir, { recursive: true, force: true });
+  }
+});
+
+test('rebuildDevSnapshot keeps the last successful snapshot when rebuild fails', async () => {
+  const themeDir = await createThemeDir(validThemeFiles());
+  const previewData = defaultPreviewData();
+
+  try {
+    const initialSnapshot = await buildDevSnapshot({ themeDir, previewData });
+    await fs.writeFile(path.join(themeDir, 'theme.json'), '{"version":"1.0.0"}');
+
+    const result = await rebuildDevSnapshot(
+      initialSnapshot,
+      () => buildDevSnapshot({ themeDir, previewData }),
+    );
+
+    assert.equal(result.changed, false);
+    assert.equal(result.snapshot, initialSnapshot);
+    assert.ok(result.error instanceof Error);
+    assert.equal(resolveSnapshotResponse('/', result.snapshot).status, 200);
+    assert.match(responseText(resolveSnapshotResponse('/', result.snapshot)), /ZeroPress Preview/);
   } finally {
     await fs.rm(themeDir, { recursive: true, force: true });
   }

@@ -5,8 +5,25 @@ import http from 'node:http';
 import { spawn } from 'node:child_process';
 import { WebSocketServer } from 'ws';
 import { PREVIEW_DATA_VERSION, assertPreviewData } from '@zeropress/preview-data-validator';
+import { buildSiteFromThemeDir, MemoryWriter } from '@zeropress/build-core';
 import { getThemeDir } from './helpers.js';
-import { validateThemeDirectory } from './validate.js';
+
+const DEV_BUILD_OPTIONS = {
+  assetHashing: false,
+  generateSpecialFiles: true,
+  injectHtmx: false,
+  writeManifest: false,
+};
+
+const SPECIAL_FILE_PATHS = new Set([
+  '/404.html',
+  '/feed.xml',
+  '/meta.json',
+  '/robots.txt',
+  '/sitemap.xml',
+]);
+
+const BUILTIN_404_HTML = '<!doctype html><html><body><h1>404</h1><p>Not Found</p></body></html>';
 
 export async function runDev(argv) {
   const { positional, flags } = parseDevArgs(argv);
@@ -18,23 +35,20 @@ export async function runDev(argv) {
     throw new Error(`Invalid port: ${flags.port}`);
   }
 
-  const validation = await validateThemeDirectory(themeDir);
-  if (validation.errors.length > 0) {
-    throw new Error(`Theme validation failed before dev start (${validation.errors.length} errors)`);
-  }
-  if (validation.warnings.length > 0) {
-    console.log(`[dev] warnings: ${validation.warnings.length}`);
-  }
+  const buildSnapshot = async () => buildDevSnapshot({
+    themeDir,
+    previewData: await loadPreviewData(flags.data),
+  });
 
-  const previewData = await loadPreviewData(flags.data);
-  assertPreviewData(previewData);
-
-  const server = http.createServer((req, res) => handleRequest(req, res, themeDir, previewData));
+  let snapshot = await buildSnapshot();
+  const server = http.createServer((req, res) => handleRequest(req, res, snapshot));
   await listenServer(server, host, port);
 
   const wss = new WebSocketServer({ server, path: '/__zeropress_ws' });
   const sockets = new Set();
   let shuttingDown = false;
+  let rebuilding = false;
+  let queued = false;
 
   server.on('connection', (socket) => {
     sockets.add(socket);
@@ -43,18 +57,37 @@ export async function runDev(argv) {
     });
   });
 
-  const watchers = await createWatchers(themeDir, async () => {
-    const quick = await validateThemeDirectory(themeDir);
-    if (quick.errors.length > 0) {
-      console.log(`[dev] validation errors on change: ${quick.errors.length}`);
+  const triggerRebuild = async () => {
+    if (rebuilding) {
+      queued = true;
+      return;
     }
 
-    for (const client of wss.clients) {
-      if (client.readyState === 1) {
-        client.send('reload');
+    rebuilding = true;
+    do {
+      queued = false;
+      const result = await rebuildDevSnapshot(snapshot, buildSnapshot);
+      if (result.changed) {
+        snapshot = result.snapshot;
+        for (const client of wss.clients) {
+          if (client.readyState === 1) {
+            client.send('reload');
+          }
+        }
+      } else {
+        console.log(`[dev] rebuild failed: ${result.error.message}`);
       }
-    }
-  });
+    } while (queued);
+    rebuilding = false;
+  };
+
+  const extraWatchPaths = [];
+  const dataFilePath = resolveLocalDataPath(flags.data);
+  if (dataFilePath) {
+    extraWatchPaths.push(dataFilePath);
+  }
+
+  const watchers = await createWatchers(themeDir, extraWatchPaths, triggerRebuild);
 
   const url = `http://${host}:${port}`;
   console.log(`[dev] running at ${url}`);
@@ -161,13 +194,21 @@ export async function loadPreviewData(dataArg) {
     return defaultPreviewData();
   }
 
+  const localPath = resolveLocalDataPath(dataArg);
+  const raw = await fs.readFile(localPath, 'utf8');
+  return JSON.parse(raw);
+}
+
+export function resolveLocalDataPath(dataArg) {
+  if (!dataArg) {
+    return null;
+  }
+
   if (/^https?:\/\//i.test(dataArg)) {
     throw new Error('--data must be a local JSON file path');
   }
 
-  const localPath = path.resolve(process.cwd(), dataArg);
-  const raw = await fs.readFile(localPath, 'utf8');
-  return JSON.parse(raw);
+  return path.resolve(process.cwd(), dataArg);
 }
 
 export function defaultPreviewData() {
@@ -179,7 +220,12 @@ export function defaultPreviewData() {
       title: 'ZeroPress Preview',
       description: 'Default preview data',
       url: 'https://example.com',
-      language: 'en',
+      locale: 'en-US',
+      postsPerPage: 2,
+      dateFormat: 'YYYY-MM-DD',
+      timeFormat: 'HH:mm',
+      timezone: 'UTC',
+      disallowComments: false,
     },
     content: {
       posts: [
@@ -190,16 +236,13 @@ export function defaultPreviewData() {
           slug: 'hello-zeropress',
           html: '<p>Preview post content</p>',
           excerpt: 'Preview excerpt',
-          published_at: '2026-02-14 09:00',
-          updated_at: '2026-02-14 09:00',
           published_at_iso: '2026-02-14T09:00:00.000Z',
           updated_at_iso: '2026-02-14T09:00:00.000Z',
-          reading_time: '1 min read',
           author_name: 'Admin',
-          categories_html: '<a href="/categories/general/" class="category-link">General</a>',
-          tags_html: '<a href="/tags/intro/" class="tag-link">Intro</a>',
-          comments_html: '<section id="comments"></section>',
           status: 'published',
+          allow_comments: true,
+          category_slugs: ['general'],
+          tag_slugs: ['intro'],
         },
         {
           id: 'post-2',
@@ -208,16 +251,13 @@ export function defaultPreviewData() {
           slug: 'theme-blocks-deep-dive',
           html: '<p>Second preview post content</p>',
           excerpt: 'Second preview excerpt',
-          published_at: '2026-02-13 09:00',
-          updated_at: '2026-02-13 09:00',
           published_at_iso: '2026-02-13T09:00:00.000Z',
           updated_at_iso: '2026-02-13T09:00:00.000Z',
-          reading_time: '2 min read',
           author_name: 'Admin',
-          categories_html: '<a href="/categories/general/" class="category-link">General</a>',
-          tags_html: '<a href="/tags/intro/" class="tag-link">Intro</a>',
-          comments_html: '<section id="comments"></section>',
           status: 'published',
+          allow_comments: true,
+          category_slugs: ['general'],
+          tag_slugs: ['intro'],
         },
         {
           id: 'post-3',
@@ -226,16 +266,13 @@ export function defaultPreviewData() {
           slug: 'archive-patterns',
           html: '<p>Third preview post content</p>',
           excerpt: 'Third preview excerpt',
-          published_at: '2026-02-12 09:00',
-          updated_at: '2026-02-12 09:00',
           published_at_iso: '2026-02-12T09:00:00.000Z',
           updated_at_iso: '2026-02-12T09:00:00.000Z',
-          reading_time: '3 min read',
           author_name: 'Admin',
-          categories_html: '<a href="/categories/general/" class="category-link">General</a>',
-          tags_html: '<a href="/tags/intro/" class="tag-link">Intro</a>',
-          comments_html: '<section id="comments"></section>',
           status: 'published',
+          allow_comments: true,
+          category_slugs: ['general'],
+          tag_slugs: ['intro'],
         },
       ],
       pages: [
@@ -247,237 +284,120 @@ export function defaultPreviewData() {
           status: 'published',
         },
       ],
-      categories: [{ id: 'cat-1', name: 'General', slug: 'general', description: 'General posts', postCount: 1 }],
-      tags: [{ id: 'tag-1', name: 'Intro', slug: 'intro', postCount: 1 }],
-    },
-    routes: {
-      index: [
-        {
-          path: '/',
-          page: 1,
-          totalPages: 2,
-          posts: [
-            '<article><h2><a href="/posts/hello-zeropress">Hello ZeroPress</a></h2><div>Preview excerpt</div></article>',
-            '<article><h2><a href="/posts/theme-blocks-deep-dive">Theme Blocks Deep Dive</a></h2><div>Second preview excerpt</div></article>',
-          ].join(''),
-          categories: '<a href="/categories/general/" class="category-link">General (3)</a>',
-          tags: '<a href="/tags/intro/" class="tag-link">Intro (3)</a>',
-          pagination: '<nav class="pagination"><span class="current">1</span><a href="/page/2/">2</a></nav>',
-        },
-        {
-          path: '/page/2/',
-          page: 2,
-          totalPages: 2,
-          posts: '<article><h2><a href="/posts/archive-patterns">Archive Patterns</a></h2><div>Third preview excerpt</div></article>',
-          categories: '<a href="/categories/general/" class="category-link">General (3)</a>',
-          tags: '<a href="/tags/intro/" class="tag-link">Intro (3)</a>',
-          pagination: '<nav class="pagination"><a href="/">1</a><span class="current">2</span></nav>',
-        },
-      ],
-      archive: [
-        {
-          path: '/archive/',
-          page: 1,
-          totalPages: 2,
-          posts: '<article><h2><a href="/posts/hello-zeropress">Hello ZeroPress</a></h2><div>Preview excerpt</div></article>',
-          pagination: '<nav class="pagination"><span class="current">1</span><a href="/archive/page/2/">2</a></nav>',
-        },
-        {
-          path: '/archive/page/2/',
-          page: 2,
-          totalPages: 2,
-          posts: '<article><h2><a href="/posts/archive-patterns">Archive Patterns</a></h2><div>Third preview excerpt</div></article>',
-          pagination: '<nav class="pagination"><a href="/archive/">1</a><span class="current">2</span></nav>',
-        },
-      ],
-      categories: [
-        {
-          path: '/categories/general/',
-          slug: 'general',
-          page: 1,
-          totalPages: 2,
-          posts: [
-            '<article><h2><a href="/posts/hello-zeropress">Hello ZeroPress</a></h2><div>Preview excerpt</div></article>',
-            '<article><h2><a href="/posts/theme-blocks-deep-dive">Theme Blocks Deep Dive</a></h2><div>Second preview excerpt</div></article>',
-          ].join(''),
-          pagination: '<nav class="pagination"><span class="current">1</span><a href="/categories/general/page/2/">2</a></nav>',
-          categories: '<a href="/categories/general/" class="category-link">General (3)</a>',
-        },
-        {
-          path: '/categories/general/page/2/',
-          slug: 'general',
-          page: 2,
-          totalPages: 2,
-          posts: '<article><h2><a href="/posts/archive-patterns">Archive Patterns</a></h2><div>Third preview excerpt</div></article>',
-          pagination: '<nav class="pagination"><a href="/categories/general/">1</a><span class="current">2</span></nav>',
-          categories: '<a href="/categories/general/" class="category-link">General (3)</a>',
-        },
-      ],
-      tags: [
-        {
-          path: '/tags/intro/',
-          slug: 'intro',
-          page: 1,
-          totalPages: 2,
-          posts: [
-            '<article><h2><a href="/posts/hello-zeropress">Hello ZeroPress</a></h2><div>Preview excerpt</div></article>',
-            '<article><h2><a href="/posts/theme-blocks-deep-dive">Theme Blocks Deep Dive</a></h2><div>Second preview excerpt</div></article>',
-          ].join(''),
-          pagination: '<nav class="pagination"><span class="current">1</span><a href="/tags/intro/page/2/">2</a></nav>',
-          tags: '<a href="/tags/intro/" class="tag-link">Intro (3)</a>',
-        },
-        {
-          path: '/tags/intro/page/2/',
-          slug: 'intro',
-          page: 2,
-          totalPages: 2,
-          posts: '<article><h2><a href="/posts/archive-patterns">Archive Patterns</a></h2><div>Third preview excerpt</div></article>',
-          pagination: '<nav class="pagination"><a href="/tags/intro/">1</a><span class="current">2</span></nav>',
-          tags: '<a href="/tags/intro/" class="tag-link">Intro (3)</a>',
-        },
-      ],
+      categories: [{ id: 'cat-1', name: 'General', slug: 'general', description: 'General posts' }],
+      tags: [{ id: 'tag-1', name: 'Intro', slug: 'intro' }],
     },
   };
 }
 
-async function handleRequest(req, res, themeDir, data) {
+export async function buildDevSnapshot({ themeDir, previewData }) {
+  assertPreviewData(previewData);
+
+  const writer = new MemoryWriter();
+  await buildSiteFromThemeDir({
+    previewData,
+    themeDir,
+    writer,
+    options: DEV_BUILD_OPTIONS,
+  });
+
+  const files = new Map(
+    writer.getFiles().map((file) => [
+      normalizeOutputPath(file.path),
+      {
+        content: file.content,
+        contentType: file.contentType,
+      },
+    ]),
+  );
+
+  return {
+    files,
+    fallbackNotFoundHtml: BUILTIN_404_HTML,
+  };
+}
+
+export async function rebuildDevSnapshot(currentSnapshot, buildSnapshot) {
+  try {
+    return {
+      snapshot: await buildSnapshot(),
+      changed: true,
+      error: null,
+    };
+  } catch (error) {
+    return {
+      snapshot: currentSnapshot,
+      changed: false,
+      error: error instanceof Error ? error : new Error(String(error)),
+    };
+  }
+}
+
+export function resolveSnapshotResponse(pathname, snapshot) {
+  const outputPath = resolveOutputPath(pathname);
+  const file = snapshot.files.get(outputPath);
+  if (file) {
+    return {
+      status: 200,
+      contentType: file.contentType,
+      body: file.content,
+    };
+  }
+
+  const notFound = snapshot.files.get('404.html');
+  if (notFound) {
+    return {
+      status: 404,
+      contentType: notFound.contentType,
+      body: notFound.content,
+    };
+  }
+
+  return {
+    status: 404,
+    contentType: 'text/html; charset=utf-8',
+    body: snapshot.fallbackNotFoundHtml,
+  };
+}
+
+export function resolveOutputPath(pathname) {
+  const normalized = normalizeRequestPath(pathname);
+
+  if (normalized === '/') {
+    return 'index.html';
+  }
+
+  if (normalized.startsWith('/assets/') || SPECIAL_FILE_PATHS.has(normalized)) {
+    return normalized.slice(1);
+  }
+
+  return `${normalized.slice(1)}/index.html`;
+}
+
+function handleRequest(req, res, snapshot) {
   try {
     const url = new URL(req.url, 'http://localhost');
-    const pathname = safeDecodePath(url.pathname);
-
-    if (pathname.startsWith('/assets/')) {
-      const assetPath = path.join(themeDir, pathname);
-      const content = await fs.readFile(assetPath);
-      const type = pathname.endsWith('.css') ? 'text/css; charset=utf-8' : 'application/octet-stream';
-      send(res, 200, type, content);
-      return;
-    }
-
-    const rendered = await renderRoute(pathname, themeDir, data);
-    if (rendered.notFound) {
-      send(res, 404, 'text/html; charset=utf-8', injectLiveReload(rendered.html));
-      return;
-    }
-
-    send(res, 200, 'text/html; charset=utf-8', injectLiveReload(rendered.html));
+    const response = resolveSnapshotResponse(url.pathname, snapshot);
+    const body = shouldInjectLiveReload(response.contentType)
+      ? injectLiveReload(response.body)
+      : response.body;
+    send(res, response.status, response.contentType, body);
   } catch (error) {
     send(res, 500, 'text/plain; charset=utf-8', `Internal error: ${error.message}`);
   }
 }
 
-export async function renderRoute(pathname, themeDir, data) {
-  const normalized = normalizeRoutePath(pathname);
-
-  const indexRoute = findRouteByPath(data.routes.index || [], normalized);
-  if (indexRoute) {
-    return { html: await renderWithLayout(themeDir, 'index.html', { ...data, ...indexRoute }) };
-  }
-
-  const archiveRoute = findRouteByPath(data.routes.archive || [], normalized);
-  if (archiveRoute) {
-    if (!(await fileExists(path.join(themeDir, 'archive.html')))) {
-      return { html: await render404(themeDir), notFound: true };
-    }
-    return { html: await renderWithLayout(themeDir, 'archive.html', { ...data, ...archiveRoute }) };
-  }
-
-  const categoryRoute = findRouteByPath(data.routes.categories || [], normalized);
-  if (categoryRoute) {
-    if (!(await fileExists(path.join(themeDir, 'category.html')))) {
-      return { html: await render404(themeDir), notFound: true };
-    }
-    return { html: await renderWithLayout(themeDir, 'category.html', { ...data, ...categoryRoute }) };
-  }
-
-  const tagRoute = findRouteByPath(data.routes.tags || [], normalized);
-  if (tagRoute) {
-    if (!(await fileExists(path.join(themeDir, 'tag.html')))) {
-      return { html: await render404(themeDir), notFound: true };
-    }
-    return { html: await renderWithLayout(themeDir, 'tag.html', { ...data, ...tagRoute }) };
-  }
-
-  const postMatch = normalized.match(/^\/posts\/([^/]+)$/);
-  if (postMatch) {
-    const post = (data.content.posts || []).find((p) => p.slug === safeDecodePathSegment(postMatch[1]));
-    if (!post) {
-      return { html: await render404(themeDir), notFound: true };
-    }
-    return { html: await renderWithLayout(themeDir, 'post.html', { ...data, post }) };
-  }
-
-  const pageMatch = normalized.match(/^\/([^/]+)$/);
-  if (pageMatch && !['archive', 'page', 'categories', 'tags', 'posts'].includes(pageMatch[1])) {
-    const page = (data.content.pages || []).find((p) => p.slug === safeDecodePathSegment(pageMatch[1]));
-    if (!page) {
-      return { html: await render404(themeDir), notFound: true };
-    }
-    return { html: await renderWithLayout(themeDir, 'page.html', { ...data, page }) };
-  }
-
-  return { html: await render404(themeDir), notFound: true };
-}
-
-async function renderWithLayout(themeDir, templateName, data) {
-  const [layout, template] = await Promise.all([
-    fs.readFile(path.join(themeDir, 'layout.html'), 'utf8'),
-    fs.readFile(path.join(themeDir, templateName), 'utf8'),
-  ]);
-
-  const header = await readOptional(path.join(themeDir, 'partials', 'header.html'));
-  const footer = await readOptional(path.join(themeDir, 'partials', 'footer.html'));
-  const body = substitute(template, data);
-
-  const withSlots = layout
-    .replace(/\{\{slot:content\}\}/g, body)
-    .replace(/\{\{slot:header\}\}/g, header)
-    .replace(/\{\{slot:footer\}\}/g, footer)
-    .replace(/\{\{slot:meta\}\}/g, '');
-
-  return substitute(withSlots, data);
-}
-
-async function render404(themeDir) {
-  const custom404 = path.join(themeDir, '404.html');
-  if (await fileExists(custom404)) {
-    return renderWithLayout(themeDir, '404.html', {
-      site: {
-        title: '404',
-        description: 'Not found',
-      },
-    });
-  }
-  return '<!doctype html><html><body><h1>404</h1><p>Not Found</p></body></html>';
-}
-
-function substitute(template, data) {
-  return template.replace(/\{\{([a-zA-Z0-9_.-]+)\}\}/g, (_, key) => {
-    if (key.startsWith('slot:')) {
-      return `{{${key}}}`;
-    }
-    const value = getByPath(data, key);
-    return value == null ? '' : String(value);
-  });
-}
-
-function getByPath(obj, key) {
-  const parts = key.split('.');
-  let current = obj;
-  for (const part of parts) {
-    if (current == null || typeof current !== 'object') {
-      return undefined;
-    }
-    current = current[part];
-  }
-  return current;
+function shouldInjectLiveReload(contentType) {
+  return typeof contentType === 'string' && contentType.startsWith('text/html');
 }
 
 function injectLiveReload(html) {
+  const markup = typeof html === 'string' ? html : Buffer.from(html).toString('utf8');
   const script = `\n<script>\n(() => {\n  const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/__zeropress_ws');\n  ws.onmessage = (event) => { if (event.data === 'reload') location.reload(); };\n})();\n</script>\n`;
-  if (html.includes('</body>')) {
-    return html.replace('</body>', `${script}</body>`);
+  if (markup.includes('</body>')) {
+    return markup.replace('</body>', `${script}</body>`);
   }
-  return `${html}${script}`;
+  return `${markup}${script}`;
 }
 
 function send(res, status, type, body) {
@@ -485,31 +405,14 @@ function send(res, status, type, body) {
   res.end(body);
 }
 
-function escapeHtml(value) {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+function normalizeRequestPath(value) {
+  const stringValue = safeDecodePath(String(value || '/'));
+  const withoutTrailingSlash = stringValue.replace(/\/+$/, '');
+  return withoutTrailingSlash || '/';
 }
 
-async function readOptional(filePath) {
-  try {
-    return await fs.readFile(filePath, 'utf8');
-  } catch (error) {
-    if (error.code === 'ENOENT') return '';
-    throw error;
-  }
-}
-
-async function fileExists(filePath) {
-  try {
-    await fs.access(filePath);
-    return true;
-  } catch {
-    return false;
-  }
+function normalizeOutputPath(filePath) {
+  return String(filePath || '').replace(/^\/+/, '');
 }
 
 function safeDecodePath(value) {
@@ -520,22 +423,16 @@ function safeDecodePath(value) {
   }
 }
 
-function safeDecodePathSegment(value) {
-  return safeDecodePath(value);
-}
-
-function normalizeRoutePath(value) {
-  return safeDecodePath(value).replace(/\/+$/, '') || '/';
-}
-
-function findRouteByPath(routes, pathname) {
-  return routes.find((entry) => normalizeRoutePath(entry.path) === pathname);
-}
-
-async function createWatchers(rootDir, onChange) {
+async function createWatchers(rootDir, extraFilePaths, onChange) {
   const watchers = [];
+  const watchedDirs = new Set();
 
   async function watchDir(dir) {
+    if (watchedDirs.has(dir)) {
+      return;
+    }
+
+    watchedDirs.add(dir);
     const watcher = watchFs(dir, { persistent: true }, () => {
       onChange().catch((error) => {
         console.log(`[dev] reload trigger error: ${error.message}`);
@@ -552,6 +449,24 @@ async function createWatchers(rootDir, onChange) {
   }
 
   await watchDir(rootDir);
+
+  for (const filePath of extraFilePaths) {
+    const parentDir = path.dirname(filePath);
+    if (watchedDirs.has(parentDir)) {
+      continue;
+    }
+
+    const targetName = path.basename(filePath);
+    const watcher = watchFs(parentDir, { persistent: true }, (_, changedName) => {
+      if (!changedName || String(changedName) === targetName) {
+        onChange().catch((error) => {
+          console.log(`[dev] reload trigger error: ${error.message}`);
+        });
+      }
+    });
+    watchers.push(watcher);
+  }
+
   return watchers;
 }
 

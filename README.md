@@ -35,7 +35,9 @@ Launches a local preview server with WebSocket-based live reload.
 
 Behavior highlights:
 
-- Watches theme directory changes and performs full reload
+- Builds the theme through `@zeropress/build-core` and serves the latest in-memory output snapshot
+- Watches theme directory changes and performs a full rebuild + full reload
+- Watches the `--data` file too when one is provided
 - Non-matching routes return 404
 - If `404.html` exists at theme root, it is rendered; otherwise a built-in 404 page is used
 
@@ -60,10 +62,10 @@ If `--data` is omitted, built-in sample data is used.
 
 Preview data contract:
 
-- `dev` only accepts the canonical preview-data v0.3 payload
-- Legacy minimal JSON payloads are rejected at startup
-- `--data` must point to a local JSON file that contains a v0.3 payload
-- The built-in sample data also conforms to preview-data v0.3
+- `dev` only accepts the canonical preview-data v0.4 payload
+- v0.3 and older payloads are rejected at startup
+- `--data` must point to a local JSON file that contains a v0.4 payload
+- The built-in sample data also conforms to preview-data v0.4
 
 Data loading rules:
 
@@ -72,7 +74,8 @@ Data loading rules:
 
 Template variable note:
 
-- Post templates can render optional comments markup via `{{post.comments_html}}`.
+- Post templates can render optional comments markup via `{{post.comments_html}}`
+- `dev` now follows build-core output parity for archive/category/tag/404/special-file generation
 
 * * *
 
