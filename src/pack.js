@@ -7,6 +7,9 @@ import { validateThemeDirectory, validateZipFile } from './validate.js';
 
 export async function runPack(argv) {
   const { positional, flags } = parsePackArgs(argv);
+  if (!positional[0]) {
+    throw new Error('pack requires a themeDir argument');
+  }
   const themeDir = getThemeDir(positional[0]);
   const outDir = path.resolve(process.cwd(), flags.out || 'dist');
   const dryRun = flags['dry-run'] === true;

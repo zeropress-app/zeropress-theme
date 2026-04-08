@@ -27,6 +27,9 @@ const BUILTIN_404_HTML = '<!doctype html><html><body><h1>404</h1><p>Not Found</p
 
 export async function runDev(argv) {
   const { positional, flags } = parseDevArgs(argv);
+  if (!positional[0]) {
+    throw new Error('dev requires a themeDir argument');
+  }
   const themeDir = getThemeDir(positional[0]);
   const host = flags.host || '127.0.0.1';
   const port = Number(flags.port || 4321);

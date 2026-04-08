@@ -3,9 +3,14 @@ import { runPack } from './pack.js';
 import { runDev } from './dev.js';
 
 export async function run(argv) {
+  if (argv.includes('--help') || argv.includes('-h')) {
+    printHelp();
+    return;
+  }
+
   const [command, ...rest] = argv;
 
-  if (!command || command === '--help' || command === '-h') {
+  if (!command) {
     printHelp();
     return;
   }
@@ -26,16 +31,17 @@ export async function run(argv) {
     return;
   }
 
-  throw new Error(`Unknown command: ${command}`);
+  printHelp();
+  throw new Error(`[zeropress-theme] Unknown command: ${command}`);
 }
 
 function printHelp() {
   console.log(`zeropress-theme - ZeroPress theme developer toolkit
 
 Usage:
-  zeropress-theme dev [themeDir] [--port <n>] [--host <ip>] [--data <path>] [--open]
-  zeropress-theme validate [themeDir|theme.zip] [--strict] [--json]
-  zeropress-theme pack [themeDir] [--out <dir>] [--name <zipFile>] [--dry-run]
+  zeropress-theme dev <themeDir> [--port <n>] [--host <ip>] [--data <path>] [--open]
+  zeropress-theme validate <themeDir|theme.zip> [--strict] [--json]
+  zeropress-theme pack <themeDir> [--out <dir>] [--name <zipFile>] [--dry-run]
 
 Notes:
   dev expects canonical preview-data v0.4 JSON.`);

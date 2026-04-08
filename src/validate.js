@@ -6,6 +6,9 @@ import { getThemeDir, walkDirectory } from './helpers.js';
 
 export async function runValidate(argv) {
   const { positional, flags } = parseValidateArgs(argv);
+  if (!positional[0]) {
+    throw new Error('validate requires a themeDir or theme.zip argument');
+  }
   const targetPath = getThemeDir(positional[0]);
   const strict = flags.strict === true;
   const json = flags.json === true;

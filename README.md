@@ -28,7 +28,7 @@ Commands
 ### dev — Preview Server
 
 ```bash
-npx @zeropress/theme dev [themeDir] [options]
+npx @zeropress/theme dev <themeDir> [options]
 ```
 
 Launches a local preview server with WebSocket-based live reload.
@@ -51,14 +51,14 @@ Behavior highlights:
 Examples:
 
 ```bash
-# Preview current directory
-npx @zeropress/theme dev
+# Preview a theme directory
+npx @zeropress/theme dev ./my-theme
 
-# Preview specific theme with custom data
+# Preview a theme directory with custom data
 npx @zeropress/theme dev ./my-theme --data ./preview.json
 ```
 
-If `--data` is omitted, built-in sample data is used.
+`themeDir` is required. If `--data` is omitted, built-in sample data is used.
 
 Preview data contract:
 
@@ -82,7 +82,7 @@ Template variable note:
 ### validate — Theme Validation
 
 ```bash
-npx @zeropress/theme validate [themeDir|theme.zip] [options]
+npx @zeropress/theme validate <themeDir|theme.zip> [options]
 ```
 
 Validates a theme directory or packaged zip against the ZeroPress Theme Runtime v0.2 contract.
@@ -96,6 +96,8 @@ npx @zeropress/theme validate ./my-theme
 # Validate a packaged zip
 npx @zeropress/theme validate ./dist/my-theme-1.0.0.zip
 ```
+
+`themeDir|theme.zip` is required.
 
 Options:
 
@@ -138,7 +140,7 @@ With `--strict`, warnings result in exit code `1`.
 ### pack — Zip Packaging
 
 ```bash
-npx @zeropress/theme pack [themeDir] [options]
+npx @zeropress/theme pack <themeDir> [options]
 ```
 
 Creates an upload-ready zip file.
@@ -157,6 +159,8 @@ Workflow:
 4.  Re-validates the archive
 
 With `--dry-run`, `pack` performs the same pre-pack validation and file selection, then prints the output path and included files without creating the archive.
+
+`themeDir` is required.
 
 Excluded automatically:  
 `.git`, `node_modules`, `dist`, `*.log`, `__MACOSX`, `.DS_Store`, lockfiles

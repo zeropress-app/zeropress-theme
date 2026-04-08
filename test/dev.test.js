@@ -184,6 +184,13 @@ test('runDev rejects v0.3 preview data payloads', async () => {
   }
 });
 
+test('runDev requires a themeDir argument', async () => {
+  await assert.rejects(
+    () => runDev([]),
+    /dev requires a themeDir argument/,
+  );
+});
+
 test('runDev rejects remote preview data URLs', async () => {
   const themeDir = await createThemeDir(validThemeFiles());
 

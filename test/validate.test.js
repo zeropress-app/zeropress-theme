@@ -97,6 +97,13 @@ test('runValidate returns 1 and emits json for invalid theme in strict json mode
   }
 });
 
+test('runValidate requires a themeDir or theme.zip argument', async () => {
+  await assert.rejects(
+    () => runValidate([]),
+    /validate requires a themeDir or theme\.zip argument/,
+  );
+});
+
 test('runValidate accepts a valid zip file path', async () => {
   const files = {
     ...validThemeFiles(),
@@ -202,6 +209,13 @@ test('runPack aborts when shared validation finds errors', async () => {
 
   await assert.rejects(() => runPack([themeDir]), /Pack aborted: validate failed/);
   await fs.rm(themeDir, { recursive: true, force: true });
+});
+
+test('runPack requires a themeDir argument', async () => {
+  await assert.rejects(
+    () => runPack([]),
+    /pack requires a themeDir argument/,
+  );
 });
 
 test('runPack --dry-run prints output plan without writing zip', async () => {
