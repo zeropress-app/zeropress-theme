@@ -26,9 +26,9 @@
     "test": "node --test"
   },
   "dependencies": {
-    "@zeropress/build-core": "^0.1.5",
-    "@zeropress/preview-data-validator": "^0.3.1",
-    "@zeropress/theme-validator": "^0.2.3",
+    "@zeropress/build-core": "^0.1.7",
+    "@zeropress/preview-data-validator": "^0.3.3",
+    "@zeropress/theme-validator": "^0.2.4",
     "jszip": "^3.10.1",
     "ws": "^8.18.0"
   }

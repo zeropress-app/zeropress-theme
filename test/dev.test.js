@@ -36,10 +36,10 @@ function validThemeFiles() {
       runtime: '0.2',
       description: 'A test theme',
     }),
-    'layout.html': '<html><body>{{slot:header}}<main>{{slot:content}}</main>{{slot:footer}}</body></html>',
+    'layout.html': '<html><head><title>{{meta.title}}</title>{{meta.head_tags}}</head><body>{{slot:header}}<main>{{slot:content}}</main>{{slot:footer}}</body></html>',
     'index.html': '<h1>{{site.title}}</h1><div id="posts">{{posts}}</div><div id="categories">{{categories}}</div><div id="tags">{{tags}}</div><div id="pagination">{{pagination}}</div>',
-    'post.html': '<article><h1>{{post.title}}</h1><div>{{post.author_name}}</div><div>{{post.html}}</div><div>{{post.comments_html}}</div></article>',
-    'page.html': '<section><h1>{{page.title}}</h1><div>{{page.html}}</div></section>',
+    'post.html': '<article><h1>{{post.title}}</h1><img class="author-avatar" src="{{post.author_avatar}}" alt=""><img class="post-featured-image" src="{{post.featured_image}}" alt=""><div>{{post.author_name}}</div><div>{{post.html}}</div><div>{{post.comments_html}}</div></article>',
+    'page.html': '<section><h1>{{page.title}}</h1><img class="page-featured-image" src="{{page.featured_image}}" alt=""><div>{{page.html}}</div></section>',
     'archive.html': '<section><h1>Archive</h1><div>{{posts}}</div><div>{{pagination}}</div></section>',
     'category.html': '<section><h1>Category</h1><div>{{posts}}</div><div>{{categories}}</div><div>{{pagination}}</div></section>',
     'tag.html': '<section><h1>Tag</h1><div>{{posts}}</div><div>{{tags}}</div><div>{{pagination}}</div></section>',
@@ -82,10 +82,21 @@ test('buildDevSnapshot serves canonical v0.4 routes, assets, and special files',
     assert.equal(home.status, 200);
     assert.match(responseText(home), /ZeroPress Preview/);
     assert.match(responseText(home), /Preview excerpt/);
+    assert.match(responseText(home), /<title>ZeroPress Preview<\/title>/);
+    assert.match(responseText(home), /property="og:type" content="website"/);
     assert.match(responseText(homePage2), /Archive Patterns/);
     assert.match(responseText(post), /Hello ZeroPress/);
     assert.match(responseText(post), /Preview post content/);
+    assert.match(responseText(post), /<title>Hello ZeroPress - ZeroPress Preview<\/title>/);
+    assert.match(responseText(post), /property="og:type" content="article"/);
+    assert.match(responseText(post), /property="article:published_time" content="2026-02-14T09:00:00.000Z"/);
+    assert.match(responseText(post), /class="author-avatar" src="https:\/\/media\.example\.com\/images\/author-avatar\.png\?size=96"/);
+    assert.match(responseText(post), /class="post-featured-image" src="https:\/\/media\.example\.com\/images\/post-share\.png\?fit=cover"/);
     assert.match(responseText(page), /About/);
+    assert.match(responseText(page), /<title>About - ZeroPress Preview<\/title>/);
+    assert.match(responseText(page), /property="og:type" content="website"/);
+    assert.match(responseText(page), /class="page-featured-image" src="https:\/\/media\.example\.com\/images\/about-share\.png\?format=webp"/);
+    assert.doesNotMatch(responseText(page), /property="article:published_time"/);
     assert.match(responseText(archive), /Archive/);
     assert.match(responseText(archivePage2), /Archive Patterns/);
     assert.match(responseText(category), /Category/);
