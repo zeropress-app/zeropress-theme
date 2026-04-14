@@ -89,7 +89,7 @@ test('buildDevSnapshot serves canonical v0.4 routes, assets, and special files',
     assert.match(responseText(post), /Preview post content/);
     assert.match(responseText(post), /<title>Hello ZeroPress - ZeroPress Preview<\/title>/);
     assert.match(responseText(post), /property="og:type" content="article"/);
-    assert.match(responseText(post), /property="article:published_time" content="2026-02-14T09:00:00.000Z"/);
+    assert.match(responseText(post), /property="article:published_time" content="2026-02-14T09:00:00Z"/);
     assert.match(responseText(post), /class="author-avatar" src="https:\/\/media\.example\.com\/images\/author-avatar\.png\?size=96"/);
     assert.match(responseText(post), /class="post-featured-image" src="https:\/\/media\.example\.com\/images\/post-share\.png\?fit=cover"/);
     assert.match(responseText(page), /About/);
@@ -163,7 +163,7 @@ test('runDev rejects v0.3 preview data payloads', async () => {
     JSON.stringify({
       version: '0.3',
       generator: 'legacy-tool',
-      generated_at: '2026-03-26T00:00:00.000Z',
+      generated_at: '2026-03-26T00:00:00Z',
       site: {
         title: 'Legacy',
         description: 'Legacy payload',
