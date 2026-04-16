@@ -4,127 +4,154 @@
 ![license](https://img.shields.io/npm/l/%40zeropress%2Ftheme)
 ![node](https://img.shields.io/node/v/%40zeropress%2Ftheme)
 
-Developer toolkit for building, validating, and packaging ZeroPress themes.
+ZeroPress theme development toolkit.
+
+This package provides the public CLI for previewing, validating, and packaging ZeroPress themes.
 
 ---
 
 ## Install
 
 ```bash
-# Run directly with npx (package name)
-npx @zeropress/theme <command>
+# Run directly with npx
 npx @zeropress/theme --help
 
-# Or install globally, then use the zeropress-theme binary
+# Or install globally
 npm install -g @zeropress/theme
 zeropress-theme --help
 ```
 
-* * *
+---
 
-Commands
---------
-
-### dev — Preview Server
+## Quick Start
 
 ```bash
-npx @zeropress/theme dev <themeDir> [options]
+npx @zeropress/theme dev ./my-theme
 ```
+
+---
+
+## Usage
+
+```bash
+zeropress-theme dev <themeDir> [--data <path>] [--host <ip>] [--port <n>] [--open]
+zeropress-theme validate <themeDir|theme.zip> [--strict] [--json]
+zeropress-theme pack <themeDir> [--out <dir>] [--name <zipFile>] [--dry-run]
+```
+
+### Arguments
+
+- `<themeDir>`: Theme directory
+- `<theme.zip>`: Packaged theme zip file
+
+### Options
+
+- `--help, -h`: Show help
+- `--version, -v`: Show version
+
+---
+
+## Examples
+
+```bash
+zeropress-theme dev ./my-theme --data ./preview-data.json
+zeropress-theme validate ./my-theme --strict
+zeropress-theme pack ./my-theme --out ./artifacts
+```
+
+---
+
+## Commands
+
+### `dev`
 
 Launches a local preview server with WebSocket-based live reload.
 
-Behavior highlights:
+#### Usage
 
-- Builds the theme through `@zeropress/build-core` and serves the latest in-memory output snapshot
-- Watches theme directory changes and performs a full rebuild + full reload
-- Watches the `--data` file too when one is provided
-- Non-matching routes return 404
-- If `404.html` exists at theme root, it is rendered; otherwise a built-in 404 page is used
+```bash
+zeropress-theme dev <themeDir> [--data <path>] [--host <ip>] [--port <n>] [--open]
+```
+
+#### Arguments
+
+- `<themeDir>`: Theme directory to preview
+
+#### Options
 
 | Option | Description | Default |
 | --- | --- | --- |
-| `--port <number>` | Server port | `4321` |
+| `--data <path>` | Local preview-data v0.5 JSON file | Built-in sample data |
 | `--host <ip>` | Bind address | `127.0.0.1` |
-| `--data <path>` | Preview data JSON file path | Built-in sample data |
-| `--open` | Open browser automatically | — |
+| `--port <n>` | Server port | `4321` |
+| `--open` | Open the browser automatically | — |
 
-Examples:
+#### Examples
 
 ```bash
-# Preview a theme directory
-npx @zeropress/theme dev ./my-theme
-
-# Preview a theme directory with custom data
-npx @zeropress/theme dev ./my-theme --data ./preview.json
+zeropress-theme dev ./my-theme
+zeropress-theme dev ./my-theme --data ./preview-data.json
 ```
 
-`themeDir` is required. If `--data` is omitted, built-in sample data is used.
+#### Notes
 
-Preview data contract:
-
-- `dev` only accepts the canonical preview-data v0.5 payload
-- v0.3 and older payloads are rejected at startup
-- `--data` must point to a local JSON file that contains a v0.5 payload
-- The built-in sample data also conforms to preview-data v0.5
+- Builds the theme through `@zeropress/build-core` and serves the latest in-memory output snapshot
+- Watches theme directory changes and performs a full rebuild with full reload
+- Watches the `--data` file too when one is provided
+- Non-matching routes return `404`
+- If `404.html` exists at theme root, it is rendered; otherwise a built-in fallback page is used
+- `dev` only accepts canonical preview-data v0.5
+- `--data` must point to a local file path
 - Built-in sample data includes enabled `primary` and `footer` menus for `{{menu:*}}` previews
-
-Data loading rules:
-
-- Only local file paths are supported
-- JSON parse failure aborts `dev` startup
-
-Template variable note:
-
 - Post templates can render optional comments markup via `{{post.comments_html}}`
-- `dev` now follows build-core output parity for archive/category/tag/404/special-file generation
+- Output behavior follows build-core parity for archive, category, tag, `404`, and special files
 
-* * *
+### `validate`
 
-### validate — Theme Validation
+Validates a theme directory or packaged zip against Theme Runtime v0.3.
 
-```bash
-npx @zeropress/theme validate <themeDir|theme.zip> [options]
-```
-
-Validates a theme directory or packaged zip against the ZeroPress Theme Runtime v0.3 contract.
-
-Examples:
+#### Usage
 
 ```bash
-# Validate a theme directory
-npx @zeropress/theme validate ./my-theme
-
-# Validate a packaged zip
-npx @zeropress/theme validate ./dist/my-theme-1.0.0.zip
+zeropress-theme validate <themeDir|theme.zip> [--strict] [--json]
 ```
 
-`themeDir|theme.zip` is required.
+#### Arguments
 
-Options:
+- `<themeDir|theme.zip>`: Theme directory or packaged theme zip file
+
+#### Options
 
 | Option | Description |
 | --- | --- |
 | `--strict` | Treat warnings as errors |
 | `--json` | Output results as JSON |
 
-#### Errors (block upload)
+#### Examples
 
-*   `theme.json` missing or invalid
-*   Missing or invalid `namespace`, `slug`, `license`, or `runtime`
-*   Missing required templates: `layout.html`, `index.html`, `post.html`, `page.html`
-*   Invalid semver in `version`
-*   `assets/style.css` missing
-*   Invalid slot usage in `layout.html`
-*   `<script>` tag inside `layout.html`
-*   Nested slots or Mustache block syntax
-*   Path traversal or symlink escape
+```bash
+zeropress-theme validate ./my-theme
+zeropress-theme validate ./dist/my-theme-1.0.0.zip --strict
+```
+
+#### Errors
+
+- `theme.json` missing or invalid
+- Missing or invalid `namespace`, `slug`, `license`, or `runtime`
+- Missing required templates: `layout.html`, `index.html`, `post.html`, `page.html`
+- Invalid semver in `version`
+- `assets/style.css` missing
+- Invalid slot usage in `layout.html`
+- `<script>` inside `layout.html`
+- Nested slots or Mustache block syntax
+- Path traversal or symlink escape
 
 #### Warnings
 
-*   `archive.html`, `category.html`, `tag.html` missing
-*   `post.html` does not include `{{post.comments_html}}` (recommended for comment rendering)
-*   `{{post.comments_html}}` used outside `post.html`
-*   macOS metadata files such as `__MACOSX/` and `._*` are ignored
+- `archive.html`, `category.html`, `tag.html` missing
+- `post.html` does not include `{{post.comments_html}}`
+- `{{post.comments_html}}` used outside `post.html`
+- macOS metadata files such as `__MACOSX/` and `._*` are ignored
 
 #### Exit Codes
 
@@ -134,80 +161,72 @@ Options:
 | `1` | Errors found |
 | `2` | Warnings only |
 
-With `--strict`, warnings result in exit code `1`.
+With `--strict`, warnings also return exit code `1`.
 
-* * *
+### `pack`
 
-### pack — Zip Packaging
+Creates an upload-ready zip file for a theme directory.
+
+#### Usage
 
 ```bash
-npx @zeropress/theme pack <themeDir> [options]
+zeropress-theme pack <themeDir> [--out <dir>] [--name <zipFile>] [--dry-run]
 ```
 
-Creates an upload-ready zip file.
+#### Arguments
+
+- `<themeDir>`: Theme directory to package
+
+#### Options
 
 | Option | Description | Default |
 | --- | --- | --- |
 | `--out <dir>` | Output directory | `dist` |
-| `--name <file>` | Zip filename | `{name}-{version}.zip` |
-| `--dry-run` | Show the output path and included files without writing a zip | — |
+| `--name <zipFile>` | Zip filename | `{name}-{version}.zip` |
+| `--dry-run` | Print the output path and included files without writing a zip | — |
 
-Workflow:
-
-1.  Runs `validate`
-2.  Excludes unnecessary files
-3.  Generates a root-flattened zip
-4.  Re-validates the archive
-
-With `--dry-run`, `pack` performs the same pre-pack validation and file selection, then prints the output path and included files without creating the archive.
-
-`themeDir` is required.
-
-Excluded automatically:  
-`.git`, `node_modules`, `dist`, `*.log`, `__MACOSX`, `.DS_Store`, lockfiles
-
-* * *
-
-CI Usage
---------
+#### Examples
 
 ```bash
-npx @zeropress/theme validate ./theme --strict
-npx @zeropress/theme validate ./artifacts/theme-1.0.0.zip --strict
-npx @zeropress/theme pack ./theme --dry-run
-npx @zeropress/theme pack ./theme --out ./artifacts
+zeropress-theme pack ./my-theme --dry-run
+zeropress-theme pack ./my-theme --out ./artifacts
 ```
 
-* * *
+#### Notes
 
-Requirements
-------------
+- Runs `validate` before packaging
+- Excludes unnecessary files such as `.git`, `node_modules`, `dist`, `*.log`, `__MACOSX`, `.DS_Store`, and lockfiles
+- Generates a root-flattened zip
+- Re-validates the generated archive
+- With `--dry-run`, prints the output path and included files without creating a zip
 
-*   Node.js >= 18.18.0
-*   ESM only
+---
 
-* * *
+## CI Usage
 
-Related
--------
+```bash
+zeropress-theme validate ./theme --strict
+zeropress-theme validate ./artifacts/theme-1.0.0.zip --strict
+zeropress-theme pack ./theme --dry-run
+zeropress-theme pack ./theme --out ./artifacts
+```
 
-*   [create-zeropress-theme](https://www.npmjs.com/package/create-zeropress-theme)
-*   ZeroPress Theme Spec v0.3: [https://zeropress.dev/spec/theme-runtime-v0.3.html](https://zeropress.dev/spec/theme-runtime-v0.3.html)
+---
 
-* * *
+## Requirements
 
-About ZeroPress
----------------
+- Node.js >= 18.18.0
+- ESM only
 
-ZeroPress is a CMS built around file-based themes and a defined runtime contract.  
-It emphasizes predictable structure and portable theme bundles.
+---
 
-Project website:  
-[https://zeropress.app](https://zeropress.app)
+## Related
 
-* * *
+- [create-zeropress-theme](https://www.npmjs.com/package/create-zeropress-theme)
+- [ZeroPress Theme Runtime v0.3](https://zeropress.dev/spec/theme-runtime-v0.3.html)
 
-License
--------
+---
+
+## License
 
 MIT
