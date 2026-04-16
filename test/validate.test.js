@@ -45,7 +45,7 @@ function validThemeFiles() {
       slug: 'test-theme',
       version: '1.0.0',
       license: 'MIT',
-      runtime: '0.2',
+      runtime: '0.3',
       description: 'A test theme',
     }),
     'layout.html': '<main>{{slot:content}}</main>',

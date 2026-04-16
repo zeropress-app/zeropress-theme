@@ -33,7 +33,7 @@ function validThemeFiles() {
       slug: 'dev-theme',
       version: '1.0.0',
       license: 'MIT',
-      runtime: '0.2',
+      runtime: '0.3',
       description: 'A test theme',
     }),
     'layout.html': '<html><head><title>{{meta.title}}</title>{{meta.head_tags}}</head><body>{{slot:header}}<main>{{slot:content}}</main>{{slot:footer}}</body></html>',
@@ -56,11 +56,11 @@ function responseText(response) {
     : Buffer.from(response.body).toString('utf8');
 }
 
-test('defaultPreviewData returns a valid v0.4 payload', () => {
+test('defaultPreviewData returns a valid v0.5 payload', () => {
   assert.doesNotThrow(() => assertPreviewData(defaultPreviewData()));
 });
 
-test('buildDevSnapshot serves canonical v0.4 routes, assets, and special files', async () => {
+test('buildDevSnapshot serves canonical v0.5 routes, assets, and special files', async () => {
   const themeDir = await createThemeDir(validThemeFiles());
 
   try {
@@ -188,7 +188,7 @@ test('runDev rejects v0.3 preview data payloads', async () => {
   try {
     await assert.rejects(
       () => runDev([themeDir, '--data', dataPath]),
-      /0\.4|routes|locale|postsPerPage|dateFormat|disallowComments|category_slugs|tag_slugs|INVALID_|UNKNOWN_PROPERTY/,
+      /0\.5|routes|menus|authors|document_type|author_id|mediaBaseUrl|locale|postsPerPage|dateFormat|disallowComments|INVALID_|UNKNOWN_PROPERTY/,
     );
   } finally {
     await fs.rm(themeDir, { recursive: true, force: true });

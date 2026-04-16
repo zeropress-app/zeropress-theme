@@ -44,5 +44,5 @@ Usage:
   zeropress-theme pack <themeDir> [--out <dir>] [--name <zipFile>] [--dry-run]
 
 Notes:
-  dev expects canonical preview-data v0.4 JSON.`);
+  dev expects canonical preview-data v0.5 JSON.`);
 }

@@ -62,10 +62,11 @@ npx @zeropress/theme dev ./my-theme --data ./preview.json
 
 Preview data contract:
 
-- `dev` only accepts the canonical preview-data v0.4 payload
+- `dev` only accepts the canonical preview-data v0.5 payload
 - v0.3 and older payloads are rejected at startup
-- `--data` must point to a local JSON file that contains a v0.4 payload
-- The built-in sample data also conforms to preview-data v0.4
+- `--data` must point to a local JSON file that contains a v0.5 payload
+- The built-in sample data also conforms to preview-data v0.5
+- Built-in sample data includes enabled `primary` and `footer` menus for `{{menu:*}}` previews
 
 Data loading rules:
 
@@ -85,7 +86,7 @@ Template variable note:
 npx @zeropress/theme validate <themeDir|theme.zip> [options]
 ```
 
-Validates a theme directory or packaged zip against the ZeroPress Theme Runtime v0.2 contract.
+Validates a theme directory or packaged zip against the ZeroPress Theme Runtime v0.3 contract.
 
 Examples:
 
@@ -191,7 +192,7 @@ Related
 -------
 
 *   [create-zeropress-theme](https://www.npmjs.com/package/create-zeropress-theme)
-*   ZeroPress Theme Spec v0.2: [https://zeropress.dev/spec/theme-runtime-v0.2.html](https://zeropress.dev/spec/theme-runtime-v0.2.html)
+*   ZeroPress Theme Spec v0.3: [https://zeropress.dev/spec/theme-runtime-v0.3.html](https://zeropress.dev/spec/theme-runtime-v0.3.html)
 
 * * *
 
