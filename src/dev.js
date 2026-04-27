@@ -18,7 +18,6 @@ const DEV_BUILD_OPTIONS = {
 const SPECIAL_FILE_PATHS = new Set([
   '/404.html',
   '/feed.xml',
-  '/meta.json',
   '/robots.txt',
   '/sitemap.xml',
 ]);
