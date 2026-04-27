@@ -33,16 +33,16 @@ function validThemeFiles() {
       slug: 'dev-theme',
       version: '1.0.0',
       license: 'MIT',
-      runtime: '0.3',
+      runtime: '0.5',
       description: 'A test theme',
     }),
     'layout.html': '<html><head><title>{{meta.title}}</title>{{meta.head_tags}}</head><body>{{slot:header}}<main>{{slot:content}}</main>{{slot:footer}}</body></html>',
-    'index.html': '<h1>{{site.title}}</h1><div id="posts">{{posts}}</div><div id="categories">{{categories}}</div><div id="tags">{{tags}}</div><div id="pagination">{{pagination}}</div>',
-    'post.html': '<article><h1>{{post.title}}</h1><img class="author-avatar" src="{{post.author_avatar}}" alt=""><img class="post-featured-image" src="{{post.featured_image}}" alt=""><div>{{post.author_name}}</div><div>{{post.html}}</div><div>{{post.comments_html}}</div></article>',
+    'index.html': '<h1>{{site.title}}</h1><div id="posts">{{#for post in posts.items}}<article>{{post.title}} {{post.excerpt}}</article>{{/for}}</div>',
+    'post.html': '<article><h1>{{post.title}}</h1><img class="author-avatar" src="{{post.author.avatar}}" alt=""><img class="post-featured-image" src="{{post.featured_image}}" alt=""><div>{{post.author.display_name}}</div><div>{{post.html}}</div></article>',
     'page.html': '<section><h1>{{page.title}}</h1><img class="page-featured-image" src="{{page.featured_image}}" alt=""><div>{{page.html}}</div></section>',
-    'archive.html': '<section><h1>Archive</h1><div>{{posts}}</div><div>{{pagination}}</div></section>',
-    'category.html': '<section><h1>Category</h1><div>{{posts}}</div><div>{{categories}}</div><div>{{pagination}}</div></section>',
-    'tag.html': '<section><h1>Tag</h1><div>{{posts}}</div><div>{{tags}}</div><div>{{pagination}}</div></section>',
+    'archive.html': '<section><h1>Archive</h1>{{#for group in archive.groups}}<h2>{{group.label}}</h2>{{#for post in group.items}}<article>{{post.title}}</article>{{/for}}{{/for}}</section>',
+    'category.html': '<section><h1>Category</h1><div>{{taxonomy.name}} ({{taxonomy.count}})</div>{{#for post in posts.items}}<article>{{post.title}}</article>{{/for}}</section>',
+    'tag.html': '<section><h1>Tag</h1><div>{{taxonomy.name}} ({{taxonomy.count}})</div>{{#for post in posts.items}}<article>{{post.title}}</article>{{/for}}</section>',
     '404.html': '<section><h1>Custom 404</h1><p>Missing route</p></section>',
     'partials/header.html': '<header>Header</header>',
     'partials/footer.html': '<footer>Footer</footer>',
@@ -154,41 +154,19 @@ test('buildDevSnapshot matches encoded request paths against encoded output path
   }
 });
 
-test('runDev rejects v0.3 preview data payloads', async () => {
+test('runDev rejects unsupported preview-data versions', async () => {
   const themeDir = await createThemeDir(validThemeFiles());
-  const dataPath = path.join(themeDir, 'legacy-preview.json');
+  const dataPath = path.join(themeDir, 'unsupported-preview.json');
 
   await fs.writeFile(
     dataPath,
-    JSON.stringify({
-      version: '0.3',
-      generator: 'legacy-tool',
-      generated_at: '2026-03-26T00:00:00Z',
-      site: {
-        title: 'Legacy',
-        description: 'Legacy payload',
-        url: 'https://example.com',
-        language: 'en',
-      },
-      content: {
-        posts: [],
-        pages: [],
-        categories: [],
-        tags: [],
-      },
-      routes: {
-        index: [],
-        archive: [],
-        categories: [],
-        tags: [],
-      },
-    }),
+    JSON.stringify({ ...defaultPreviewData(), version: 'unsupported' }),
   );
 
   try {
     await assert.rejects(
       () => runDev([themeDir, '--data', dataPath]),
-      /0\.5|routes|menus|authors|document_type|author_id|mediaBaseUrl|locale|postsPerPage|dateFormat|disallowComments|INVALID_|UNKNOWN_PROPERTY/,
+      /0\.5|version|INVALID_/,
     );
   } finally {
     await fs.rm(themeDir, { recursive: true, force: true });

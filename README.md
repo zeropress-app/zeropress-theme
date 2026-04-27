@@ -103,12 +103,12 @@ zeropress-theme dev ./my-theme --data ./preview-data.json
 - `dev` only accepts canonical preview-data v0.5
 - `--data` must point to a local file path
 - Built-in sample data includes enabled `primary` and `footer` menus for `{{menu:*}}` previews
-- Post templates can render optional comments markup via `{{post.comments_html}}`
+- Post templates can render a theme-owned comments island by checking `{{#if post.comments_enabled}}`
 - Output behavior follows build-core parity for archive, category, tag, `404`, and special files
 
 ### `validate`
 
-Validates a theme directory or packaged zip against Theme Runtime v0.3.
+Validates a theme directory or packaged zip against Theme Runtime v0.5.
 
 #### Usage
 
@@ -149,8 +149,6 @@ zeropress-theme validate ./dist/my-theme-1.0.0.zip --strict
 #### Warnings
 
 - `archive.html`, `category.html`, `tag.html` missing
-- `post.html` does not include `{{post.comments_html}}`
-- `{{post.comments_html}}` used outside `post.html`
 - macOS metadata files such as `__MACOSX/` and `._*` are ignored
 
 #### Exit Codes
@@ -223,7 +221,7 @@ zeropress-theme pack ./theme --out ./artifacts
 ## Related
 
 - [create-zeropress-theme](https://www.npmjs.com/package/create-zeropress-theme)
-- [ZeroPress Theme Runtime v0.3](https://zeropress.dev/spec/theme-runtime-v0.3.html)
+- [ZeroPress Theme Runtime v0.5](https://zeropress.dev/spec/theme-runtime-v0.5.html)
 
 ---
 

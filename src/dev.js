@@ -350,6 +350,7 @@ export function defaultPreviewData() {
         ],
       },
     },
+    widgets: {},
   };
 }
 
