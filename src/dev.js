@@ -15,6 +15,8 @@ const DEV_BUILD_OPTIONS = {
   writeManifest: false,
 };
 
+export const DEFAULT_DEV_PORT = 4000;
+
 const SPECIAL_FILE_PATHS = new Set([
   '/404.html',
   '/feed.xml',
@@ -31,9 +33,10 @@ export async function runDev(argv) {
   }
   const themeDir = getThemeDir(positional[0]);
   const host = flags.host || '127.0.0.1';
-  const port = Number(flags.port || 4321);
+  const port = Number(flags.port || DEFAULT_DEV_PORT);
+  const strictPort = flags.strictPort === true;
 
-  if (!Number.isInteger(port) || port <= 0) {
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
     throw new Error(`Invalid port: ${flags.port}`);
   }
 
@@ -44,7 +47,7 @@ export async function runDev(argv) {
 
   let snapshot = await buildSnapshot();
   const server = http.createServer((req, res) => handleRequest(req, res, snapshot));
-  await listenServer(server, host, port);
+  const actualPort = await listenServerWithFallback(server, host, port, { strictPort });
 
   const wss = new WebSocketServer({ server, path: '/__zeropress_ws' });
   const sockets = new Set();
@@ -91,7 +94,7 @@ export async function runDev(argv) {
 
   const watchers = await createWatchers(themeDir, extraWatchPaths, triggerRebuild);
 
-  const url = `http://${host}:${port}`;
+  const url = `http://${host}:${actualPort}`;
   console.log(`[dev] running at ${url}`);
   if (flags.open === true) {
     openBrowser(url);
@@ -145,7 +148,12 @@ function parseDevArgs(argv) {
 
     const key = token.slice(2);
     if (key === 'open') {
-      flags[key] = true;
+      flags.open = true;
+      continue;
+    }
+
+    if (key === 'strict-port') {
+      flags.strictPort = true;
       continue;
     }
 
@@ -165,11 +173,31 @@ function parseDevArgs(argv) {
   return { positional, flags };
 }
 
+export async function listenServerWithFallback(server, host, port, { strictPort = false } = {}) {
+  let candidatePort = port;
+
+  while (candidatePort <= 65535) {
+    try {
+      await listenServer(server, host, candidatePort);
+      return getListeningPort(server, candidatePort);
+    } catch (error) {
+      if (!isAddressInUseError(error) || strictPort || candidatePort === 65535) {
+        throw normalizeListenError(error, host, candidatePort, { strictPort });
+      }
+
+      console.log(`[dev] port ${candidatePort} is already in use, trying ${candidatePort + 1}`);
+      candidatePort += 1;
+    }
+  }
+
+  throw new Error(`Dev server could not start: no available ports from ${port} to 65535.`);
+}
+
 function listenServer(server, host, port) {
   return new Promise((resolve, reject) => {
     const onError = (error) => {
       server.off('listening', onListening);
-      reject(normalizeListenError(error, host, port));
+      reject(error);
     };
 
     const onListening = () => {
@@ -183,9 +211,23 @@ function listenServer(server, host, port) {
   });
 }
 
-export function normalizeListenError(error, host, port) {
-  if (error && typeof error === 'object' && error.code === 'EADDRINUSE') {
-    return new Error(`Dev server could not start: ${host}:${port} is already in use. Try --port with a different value.`);
+function isAddressInUseError(error) {
+  return error && typeof error === 'object' && error.code === 'EADDRINUSE';
+}
+
+function getListeningPort(server, fallbackPort) {
+  const address = server.address();
+  if (address && typeof address === 'object') {
+    return address.port;
+  }
+
+  return fallbackPort;
+}
+
+export function normalizeListenError(error, host, port, { strictPort = false } = {}) {
+  if (isAddressInUseError(error)) {
+    const strictHint = strictPort ? ' Port fallback is disabled by --strict-port.' : '';
+    return new Error(`Dev server could not start: ${host}:${port} is already in use.${strictHint}`);
   }
 
   return error instanceof Error ? error : new Error(String(error));

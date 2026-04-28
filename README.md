@@ -34,7 +34,7 @@ npx @zeropress/theme dev ./my-theme
 ## Usage
 
 ```bash
-zeropress-theme dev <themeDir> [--data <path>] [--host <ip>] [--port <n>] [--open]
+zeropress-theme dev <themeDir> [--data <path>] [--host <ip>] [--port <n>] [--strict-port] [--open]
 zeropress-theme validate <themeDir|theme.zip> [--strict] [--json]
 zeropress-theme pack <themeDir> [--out <dir>] [--name <zipFile>] [--dry-run]
 ```
@@ -70,7 +70,7 @@ Launches a local preview server with WebSocket-based live reload.
 #### Usage
 
 ```bash
-zeropress-theme dev <themeDir> [--data <path>] [--host <ip>] [--port <n>] [--open]
+zeropress-theme dev <themeDir> [--data <path>] [--host <ip>] [--port <n>] [--strict-port] [--open]
 ```
 
 #### Arguments
@@ -83,7 +83,8 @@ zeropress-theme dev <themeDir> [--data <path>] [--host <ip>] [--port <n>] [--ope
 | --- | --- | --- |
 | `--data <path>` | Local preview-data v0.5 JSON file | Built-in sample data |
 | `--host <ip>` | Bind address | `127.0.0.1` |
-| `--port <n>` | Server port | `4321` |
+| `--port <n>` | Preferred server port | `4000` |
+| `--strict-port` | Fail when the preferred port is already in use instead of trying the next port | — |
 | `--open` | Open the browser automatically | — |
 
 #### Examples
@@ -96,6 +97,7 @@ zeropress-theme dev ./my-theme --data ./preview-data.json
 #### Notes
 
 - Builds the theme through `@zeropress/build-core` and serves the latest in-memory output snapshot
+- Starts on the preferred port, or the next available port unless `--strict-port` is used
 - Watches theme directory changes and performs a full rebuild with full reload
 - Watches the `--data` file too when one is provided
 - Non-matching routes return `404`

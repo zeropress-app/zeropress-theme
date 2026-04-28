@@ -1,12 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { assertPreviewData } from '@zeropress/preview-data-validator';
 import {
   buildDevSnapshot,
+  DEFAULT_DEV_PORT,
   defaultPreviewData,
+  listenServerWithFallback,
   normalizeListenError,
   rebuildDevSnapshot,
   resolveSnapshotResponse,
@@ -54,6 +57,40 @@ function responseText(response) {
   return typeof response.body === 'string'
     ? response.body
     : Buffer.from(response.body).toString('utf8');
+}
+
+class FakeServer extends EventEmitter {
+  constructor({ busyPorts = [] } = {}) {
+    super();
+    this.busyPorts = new Set(busyPorts);
+    this.boundPort = null;
+    this.listening = false;
+  }
+
+  listen(port) {
+    queueMicrotask(() => {
+      if (this.busyPorts.has(port)) {
+        this.emit('error', Object.assign(new Error('listen EADDRINUSE'), { code: 'EADDRINUSE' }));
+        return;
+      }
+
+      this.boundPort = port;
+      this.listening = true;
+      this.emit('listening');
+    });
+  }
+
+  address() {
+    if (!this.listening) {
+      return null;
+    }
+
+    return {
+      address: '127.0.0.1',
+      family: 'IPv4',
+      port: this.boundPort,
+    };
+  }
 }
 
 test('defaultPreviewData returns a valid v0.5 payload', () => {
@@ -264,8 +301,30 @@ test('normalizeListenError returns a friendly message for port conflicts', () =>
   const normalized = normalizeListenError(
     Object.assign(new Error('listen EADDRINUSE'), { code: 'EADDRINUSE' }),
     '127.0.0.1',
-    4321,
+    DEFAULT_DEV_PORT,
   );
 
-  assert.match(normalized.message, /127\.0\.0\.1:4321 is already in use/);
+  assert.match(normalized.message, /127\.0\.0\.1:4000 is already in use/);
+});
+
+test('listenServerWithFallback uses the next available port when the requested port is busy', async () => {
+  const server = new FakeServer({ busyPorts: [DEFAULT_DEV_PORT, DEFAULT_DEV_PORT + 1] });
+
+  const selectedPort = await listenServerWithFallback(server, '127.0.0.1', DEFAULT_DEV_PORT);
+  const address = server.address();
+
+  assert.equal(selectedPort, DEFAULT_DEV_PORT + 2);
+  assert.ok(address && typeof address === 'object');
+  assert.equal(address.port, selectedPort);
+});
+
+test('listenServerWithFallback rejects the requested port when strictPort is true', async () => {
+  const server = new FakeServer({ busyPorts: [DEFAULT_DEV_PORT] });
+
+  await assert.rejects(
+    () => listenServerWithFallback(server, '127.0.0.1', DEFAULT_DEV_PORT, { strictPort: true }),
+    /already in use.*--strict-port/,
+  );
+
+  assert.equal(server.listening, false);
 });
