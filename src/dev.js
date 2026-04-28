@@ -16,6 +16,29 @@ const DEV_BUILD_OPTIONS = {
 };
 
 export const DEFAULT_DEV_PORT = 4000;
+const PUBLIC_DIR_NAME = 'public';
+
+const CONTENT_TYPES = new Map([
+  ['.css', 'text/css; charset=utf-8'],
+  ['.gif', 'image/gif'],
+  ['.htm', 'text/html; charset=utf-8'],
+  ['.html', 'text/html; charset=utf-8'],
+  ['.ico', 'image/x-icon'],
+  ['.jpeg', 'image/jpeg'],
+  ['.jpg', 'image/jpeg'],
+  ['.js', 'text/javascript; charset=utf-8'],
+  ['.json', 'application/json; charset=utf-8'],
+  ['.md', 'text/markdown; charset=utf-8'],
+  ['.mjs', 'text/javascript; charset=utf-8'],
+  ['.pdf', 'application/pdf'],
+  ['.png', 'image/png'],
+  ['.svg', 'image/svg+xml'],
+  ['.txt', 'text/plain; charset=utf-8'],
+  ['.webp', 'image/webp'],
+  ['.woff', 'font/woff'],
+  ['.woff2', 'font/woff2'],
+  ['.xml', 'application/xml; charset=utf-8'],
+]);
 
 const SPECIAL_FILE_PATHS = new Set([
   '/404.html',
@@ -46,7 +69,12 @@ export async function runDev(argv) {
   });
 
   let snapshot = await buildSnapshot();
-  const server = http.createServer((req, res) => handleRequest(req, res, snapshot));
+  const publicDir = await resolveExistingPublicDir(resolvePublicDir());
+  const server = http.createServer((req, res) => {
+    handleRequest(req, res, snapshot, publicDir).catch((error) => {
+      send(res, 500, 'text/plain; charset=utf-8', `Internal error: ${error.message}`);
+    });
+  });
   const actualPort = await listenServerWithFallback(server, host, port, { strictPort });
 
   const wss = new WebSocketServer({ server, path: '/__zeropress_ws' });
@@ -92,7 +120,8 @@ export async function runDev(argv) {
     extraWatchPaths.push(dataFilePath);
   }
 
-  const watchers = await createWatchers(themeDir, extraWatchPaths, triggerRebuild);
+  const extraWatchDirs = publicDir ? [publicDir] : [];
+  const watchers = await createWatchers(themeDir, extraWatchPaths, extraWatchDirs, triggerRebuild);
 
   const url = `http://${host}:${actualPort}`;
   console.log(`[dev] running at ${url}`);
@@ -440,16 +469,43 @@ export async function rebuildDevSnapshot(currentSnapshot, buildSnapshot) {
 }
 
 export function resolveSnapshotResponse(pathname, snapshot) {
-  const outputPath = resolveOutputPath(pathname);
-  const file = snapshot.files.get(outputPath);
+  const file = resolveSnapshotFileResponse(pathname, snapshot);
   if (file) {
-    return {
-      status: 200,
-      contentType: file.contentType,
-      body: file.content,
-    };
+    return file;
   }
 
+  return resolveNotFoundResponse(snapshot);
+}
+
+export async function resolveDevResponse(pathname, snapshot, publicDir = null) {
+  const file = resolveSnapshotFileResponse(pathname, snapshot);
+  if (file) {
+    return file;
+  }
+
+  const publicFile = await resolvePublicFileResponse(pathname, publicDir);
+  if (publicFile) {
+    return publicFile;
+  }
+
+  return resolveNotFoundResponse(snapshot);
+}
+
+function resolveSnapshotFileResponse(pathname, snapshot) {
+  const outputPath = resolveOutputPath(pathname);
+  const file = snapshot.files.get(outputPath);
+  if (!file) {
+    return null;
+  }
+
+  return {
+    status: 200,
+    contentType: file.contentType,
+    body: file.content,
+  };
+}
+
+function resolveNotFoundResponse(snapshot) {
   const notFound = snapshot.files.get('404.html');
   if (notFound) {
     return {
@@ -463,6 +519,42 @@ export function resolveSnapshotResponse(pathname, snapshot) {
     status: 404,
     contentType: 'text/html; charset=utf-8',
     body: snapshot.fallbackNotFoundHtml,
+  };
+}
+
+export async function resolvePublicFileResponse(pathname, publicDir = null) {
+  if (!publicDir) {
+    return null;
+  }
+
+  const outputPath = resolvePublicOutputPath(pathname);
+  if (!outputPath) {
+    return null;
+  }
+
+  const fullPath = resolvePublicFilePath(publicDir, outputPath);
+  if (!fullPath) {
+    return null;
+  }
+
+  let stat;
+  try {
+    stat = await fs.lstat(fullPath);
+  } catch (error) {
+    if (error && error.code === 'ENOENT') {
+      return null;
+    }
+    throw error;
+  }
+
+  if (!stat.isFile()) {
+    return null;
+  }
+
+  return {
+    status: 200,
+    contentType: getContentType(fullPath),
+    body: await fs.readFile(fullPath),
   };
 }
 
@@ -480,10 +572,10 @@ export function resolveOutputPath(pathname) {
   return `${normalized.slice(1)}/index.html`;
 }
 
-function handleRequest(req, res, snapshot) {
+export async function handleRequest(req, res, snapshot, publicDir = null) {
   try {
     const url = new URL(req.url, 'http://localhost');
-    const response = resolveSnapshotResponse(url.pathname, snapshot);
+    const response = await resolveDevResponse(url.pathname, snapshot, publicDir);
     const body = shouldInjectLiveReload(response.contentType)
       ? injectLiveReload(response.body)
       : response.body;
@@ -521,6 +613,51 @@ function normalizeOutputPath(filePath) {
   return String(filePath || '').replace(/^\/+/, '');
 }
 
+function resolvePublicOutputPath(pathname) {
+  const normalized = normalizeRequestPath(pathname);
+  if (normalized === '/') {
+    return null;
+  }
+
+  return normalizeOutputPath(normalized);
+}
+
+function resolvePublicFilePath(publicDir, outputPath) {
+  const fullPath = path.resolve(publicDir, outputPath);
+  const relativePath = path.relative(publicDir, fullPath);
+  if (!relativePath || relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+    return null;
+  }
+
+  return fullPath;
+}
+
+function getContentType(filePath) {
+  return CONTENT_TYPES.get(path.extname(filePath).toLowerCase()) || 'application/octet-stream';
+}
+
+export function resolvePublicDir(cwd = process.cwd()) {
+  return path.resolve(cwd, PUBLIC_DIR_NAME);
+}
+
+export async function resolveExistingPublicDir(publicDir = resolvePublicDir()) {
+  let stat;
+  try {
+    stat = await fs.lstat(publicDir);
+  } catch (error) {
+    if (error && error.code === 'ENOENT') {
+      return null;
+    }
+    throw error;
+  }
+
+  if (!stat.isDirectory()) {
+    throw new Error(`Public path is not a directory: ${publicDir}`);
+  }
+
+  return publicDir;
+}
+
 function safeDecodePath(value) {
   try {
     return decodeURIComponent(value);
@@ -529,7 +666,7 @@ function safeDecodePath(value) {
   }
 }
 
-async function createWatchers(rootDir, extraFilePaths, onChange) {
+async function createWatchers(rootDir, extraFilePaths, extraDirPaths, onChange) {
   const watchers = [];
   const watchedDirs = new Set();
 
@@ -555,6 +692,10 @@ async function createWatchers(rootDir, extraFilePaths, onChange) {
   }
 
   await watchDir(rootDir);
+
+  for (const dirPath of extraDirPaths) {
+    await watchDir(dirPath);
+  }
 
   for (const filePath of extraFilePaths) {
     const parentDir = path.dirname(filePath);

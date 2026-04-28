@@ -9,9 +9,13 @@ import {
   buildDevSnapshot,
   DEFAULT_DEV_PORT,
   defaultPreviewData,
+  handleRequest,
   listenServerWithFallback,
   normalizeListenError,
   rebuildDevSnapshot,
+  resolveDevResponse,
+  resolveExistingPublicDir,
+  resolvePublicFileResponse,
   resolveSnapshotResponse,
   runDev,
 } from '../src/dev.js';
@@ -91,6 +95,21 @@ class FakeServer extends EventEmitter {
       port: this.boundPort,
     };
   }
+}
+
+function createFakeResponse() {
+  return {
+    status: null,
+    headers: null,
+    body: null,
+    writeHead(status, headers) {
+      this.status = status;
+      this.headers = headers;
+    },
+    end(body) {
+      this.body = body;
+    },
+  };
 }
 
 test('defaultPreviewData returns a valid v0.5 payload', () => {
@@ -253,6 +272,118 @@ test('resolveSnapshotResponse returns custom 404 or built-in fallback for missin
   } finally {
     await fs.rm(themeDir, { recursive: true, force: true });
     await fs.rm(themeDirWithout404, { recursive: true, force: true });
+  }
+});
+
+test('resolveDevResponse serves generated output before public files', async () => {
+  const themeDir = await createThemeDir(validThemeFiles());
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-theme-public-'));
+  const publicDir = path.join(tempDir, 'public');
+
+  try {
+    await fs.mkdir(path.join(publicDir, 'assets'), { recursive: true });
+    await fs.writeFile(path.join(publicDir, 'assets', 'style.css'), 'body { color: red; }', 'utf8');
+
+    const snapshot = await buildDevSnapshot({ themeDir, previewData: defaultPreviewData() });
+    const response = await resolveDevResponse('/assets/style.css', snapshot, publicDir);
+
+    assert.equal(response.status, 200);
+    assert.match(responseText(response), /body\{color:black\}/);
+    assert.doesNotMatch(responseText(response), /color: red/);
+  } finally {
+    await fs.rm(themeDir, { recursive: true, force: true });
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('resolveDevResponse serves exact public files as fallback', async () => {
+  const themeDir = await createThemeDir(validThemeFiles());
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-theme-public-'));
+  const publicDir = path.join(tempDir, 'public');
+
+  try {
+    await fs.mkdir(path.join(publicDir, 'vendor'), { recursive: true });
+    await fs.mkdir(path.join(publicDir, 'docs'), { recursive: true });
+    await fs.writeFile(path.join(publicDir, 'favicon.ico'), 'icon', 'utf8');
+    await fs.writeFile(path.join(publicDir, 'vendor', 'app.js'), 'console.log("public")', 'utf8');
+    await fs.writeFile(path.join(publicDir, 'docs', 'foo.md'), '# Foo', 'utf8');
+
+    const snapshot = await buildDevSnapshot({ themeDir, previewData: defaultPreviewData() });
+    const favicon = await resolveDevResponse('/favicon.ico', snapshot, publicDir);
+    const script = await resolveDevResponse('/vendor/app.js', snapshot, publicDir);
+    const markdown = await resolveDevResponse('/docs/foo.md', snapshot, publicDir);
+    const missing = await resolveDevResponse('/missing.txt', snapshot, publicDir);
+
+    assert.equal(favicon.status, 200);
+    assert.equal(favicon.contentType, 'image/x-icon');
+    assert.equal(responseText(favicon), 'icon');
+    assert.equal(script.contentType, 'text/javascript; charset=utf-8');
+    assert.equal(responseText(script), 'console.log("public")');
+    assert.equal(markdown.contentType, 'text/markdown; charset=utf-8');
+    assert.equal(responseText(markdown), '# Foo');
+    assert.equal(missing.status, 404);
+  } finally {
+    await fs.rm(themeDir, { recursive: true, force: true });
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('resolvePublicFileResponse does not serve files outside public', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-theme-public-'));
+  const publicDir = path.join(tempDir, 'public');
+
+  try {
+    await fs.mkdir(publicDir, { recursive: true });
+    await fs.writeFile(path.join(tempDir, 'secret.txt'), 'secret', 'utf8');
+
+    const response = await resolvePublicFileResponse('/%2e%2e/secret.txt', publicDir);
+
+    assert.equal(response, null);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('handleRequest injects live reload into public HTML fallback', async () => {
+  const themeDir = await createThemeDir(validThemeFiles());
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-theme-public-'));
+  const publicDir = path.join(tempDir, 'public');
+  const res = createFakeResponse();
+
+  try {
+    await fs.mkdir(publicDir, { recursive: true });
+    await fs.writeFile(path.join(publicDir, 'snippet.html'), '<!doctype html><html><body>Public</body></html>', 'utf8');
+
+    const snapshot = await buildDevSnapshot({ themeDir, previewData: defaultPreviewData() });
+    await handleRequest({ url: '/snippet.html' }, res, snapshot, publicDir);
+
+    assert.equal(res.status, 200);
+    assert.equal(res.headers['content-type'], 'text/html; charset=utf-8');
+    assert.match(responseText({ body: res.body }), /__zeropress_ws/);
+  } finally {
+    await fs.rm(themeDir, { recursive: true, force: true });
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('resolveExistingPublicDir returns cwd public directory only when it exists as a directory', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-theme-public-'));
+  const publicDir = path.join(tempDir, 'public');
+
+  try {
+    assert.equal(await resolveExistingPublicDir(publicDir), null);
+
+    await fs.mkdir(publicDir);
+    assert.equal(await resolveExistingPublicDir(publicDir), publicDir);
+
+    await fs.rm(publicDir, { recursive: true, force: true });
+    await fs.writeFile(publicDir, 'not a directory', 'utf8');
+    await assert.rejects(
+      () => resolveExistingPublicDir(publicDir),
+      /Public path is not a directory:/,
+    );
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
   }
 });
 
