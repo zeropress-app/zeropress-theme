@@ -13,11 +13,11 @@ import {
   listenServerWithFallback,
   normalizeListenError,
   rebuildDevSnapshot,
+  runDev,
   resolveDevResponse,
   resolveExistingPublicDir,
   resolvePublicFileResponse,
   resolveSnapshotResponse,
-  runDev,
 } from '../src/dev.js';
 
 async function createThemeDir(files) {
@@ -328,6 +328,40 @@ test('resolveDevResponse serves exact public files as fallback', async () => {
   }
 });
 
+test('resolvePublicFileResponse ignores private public entries', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-theme-public-'));
+  const publicDir = path.join(tempDir, 'public');
+
+  try {
+    await fs.mkdir(path.join(publicDir, '.git'), { recursive: true });
+    await fs.mkdir(path.join(publicDir, '.vscode'), { recursive: true });
+    await fs.mkdir(path.join(publicDir, 'node_modules'), { recursive: true });
+    await fs.writeFile(path.join(publicDir, '.env'), 'secret', 'utf8');
+    await fs.writeFile(path.join(publicDir, '.DS_Store'), 'metadata', 'utf8');
+    await fs.writeFile(path.join(publicDir, '.git', 'config'), 'git config', 'utf8');
+    await fs.writeFile(path.join(publicDir, '.vscode', 'settings.json'), '{}', 'utf8');
+    await fs.writeFile(path.join(publicDir, 'node_modules', 'x.js'), 'module', 'utf8');
+    await fs.writeFile(path.join(publicDir, 'Thumbs.db'), 'thumbs', 'utf8');
+    await fs.writeFile(path.join(publicDir, 'private.key'), 'key', 'utf8');
+    await fs.writeFile(path.join(publicDir, 'cert.PEM'), 'pem', 'utf8');
+
+    for (const requestPath of [
+      '/.env',
+      '/.DS_Store',
+      '/.git/config',
+      '/.vscode/settings.json',
+      '/node_modules/x.js',
+      '/Thumbs.db',
+      '/private.key',
+      '/cert.PEM',
+    ]) {
+      assert.equal(await resolvePublicFileResponse(requestPath, publicDir), null);
+    }
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('resolvePublicFileResponse does not serve files outside public', async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-theme-public-'));
   const publicDir = path.join(tempDir, 'public');
@@ -340,6 +374,29 @@ test('resolvePublicFileResponse does not serve files outside public', async () =
 
     assert.equal(response, null);
   } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('runDev rejects theme directories that overlap cwd public', async () => {
+  const cwd = process.cwd();
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-theme-dev-'));
+
+  try {
+    process.chdir(tempDir);
+    await fs.mkdir(path.join(tempDir, 'public', 'theme'), { recursive: true });
+    await fs.writeFile(path.join(tempDir, 'public', 'theme', 'theme.json'), '{}', 'utf8');
+
+    await assert.rejects(
+      () => runDev(['public']),
+      /Theme directory must not overlap the cwd public directory:/,
+    );
+    await assert.rejects(
+      () => runDev(['public/theme']),
+      /Theme directory must not overlap the cwd public directory:/,
+    );
+  } finally {
+    process.chdir(cwd);
     await fs.rm(tempDir, { recursive: true, force: true });
   }
 });

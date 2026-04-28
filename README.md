@@ -99,6 +99,8 @@ zeropress-theme dev ./my-theme --data ./preview-data.json
 - Builds the theme through `@zeropress/build-core` and serves the latest in-memory output snapshot
 - Falls back to files in `./public/` from the current working directory when a route is not generated
 - Generated output is served before public files when paths overlap
+- Hidden entries, `node_modules`, `Thumbs.db`, `*.key`, `*.pem`, and symlinks inside `public/` are ignored
+- The theme directory must not overlap with `./public/`
 - Starts on the preferred port, or the next available port unless `--strict-port` is used
 - Watches theme directory changes and performs a full rebuild with full reload
 - Watches the `--data` file too when one is provided

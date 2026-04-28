@@ -55,6 +55,7 @@ export async function runDev(argv) {
     throw new Error('dev requires a themeDir argument');
   }
   const themeDir = getThemeDir(positional[0]);
+  assertPublicPathDoesNotOverlap('Theme directory', themeDir);
   const host = flags.host || '127.0.0.1';
   const port = Number(flags.port || DEFAULT_DEV_PORT);
   const strictPort = flags.strictPort === true;
@@ -532,6 +533,10 @@ export async function resolvePublicFileResponse(pathname, publicDir = null) {
     return null;
   }
 
+  if (outputPath.split('/').some((segment) => shouldIgnorePublicEntry(segment))) {
+    return null;
+  }
+
   const fullPath = resolvePublicFilePath(publicDir, outputPath);
   if (!fullPath) {
     return null;
@@ -658,6 +663,39 @@ export async function resolveExistingPublicDir(publicDir = resolvePublicDir()) {
   return publicDir;
 }
 
+export function shouldIgnorePublicEntry(name) {
+  const basename = String(name || '');
+  const lowerName = basename.toLowerCase();
+  return (
+    basename.startsWith('.')
+    || lowerName === 'node_modules'
+    || lowerName === 'thumbs.db'
+    || lowerName.endsWith('.key')
+    || lowerName.endsWith('.pem')
+  );
+}
+
+export function assertPublicPathDoesNotOverlap(label, candidatePath, cwd = process.cwd()) {
+  const publicDir = resolvePublicDir(cwd);
+  const resolvedCandidate = path.resolve(cwd, candidatePath);
+  if (!pathsOverlap(publicDir, resolvedCandidate)) {
+    return;
+  }
+
+  throw new Error(`${label} must not overlap the cwd public directory: ${resolvedCandidate}`);
+}
+
+function pathsOverlap(firstPath, secondPath) {
+  const first = path.resolve(firstPath);
+  const second = path.resolve(secondPath);
+  return first === second || isPathInside(first, second) || isPathInside(second, first);
+}
+
+function isPathInside(parentPath, childPath) {
+  const relativePath = path.relative(parentPath, childPath);
+  return Boolean(relativePath) && !relativePath.startsWith('..') && !path.isAbsolute(relativePath);
+}
+
 function safeDecodePath(value) {
   try {
     return decodeURIComponent(value);
@@ -685,7 +723,7 @@ async function createWatchers(rootDir, extraFilePaths, extraDirPaths, onChange) 
 
     const entries = await fs.readdir(dir, { withFileTypes: true });
     for (const entry of entries) {
-      if (entry.isDirectory()) {
+      if (!entry.isSymbolicLink() && !shouldIgnorePublicEntry(entry.name) && entry.isDirectory()) {
         await watchDir(path.join(dir, entry.name));
       }
     }
