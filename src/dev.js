@@ -4,7 +4,6 @@ import path from 'node:path';
 import http from 'node:http';
 import { spawn } from 'node:child_process';
 import { WebSocketServer } from 'ws';
-import { PREVIEW_DATA_VERSION, assertPreviewData } from '@zeropress/preview-data-validator';
 import { buildSiteFromThemeDir, MemoryWriter } from '@zeropress/build-core';
 import { getThemeDir } from './helpers.js';
 
@@ -16,6 +15,7 @@ const DEV_BUILD_OPTIONS = {
 };
 
 export const DEFAULT_DEV_PORT = 4000;
+const PREVIEW_DATA_VERSION = '0.5';
 const PUBLIC_DIR_NAME = 'public';
 
 const CONTENT_TYPES = new Map([
@@ -427,8 +427,6 @@ export function defaultPreviewData() {
 }
 
 export async function buildDevSnapshot({ themeDir, previewData }) {
-  assertPreviewData(previewData);
-
   const writer = new MemoryWriter();
   await buildSiteFromThemeDir({
     previewData,

@@ -4,7 +4,6 @@ import { EventEmitter } from 'node:events';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { assertPreviewData } from '@zeropress/preview-data-validator';
 import {
   buildDevSnapshot,
   DEFAULT_DEV_PORT,
@@ -112,8 +111,16 @@ function createFakeResponse() {
   };
 }
 
-test('defaultPreviewData returns a valid v0.5 payload', () => {
-  assert.doesNotThrow(() => assertPreviewData(defaultPreviewData()));
+test('defaultPreviewData builds a valid v0.5 dev snapshot', async () => {
+  const themeDir = await createThemeDir(validThemeFiles());
+
+  try {
+    await assert.doesNotReject(
+      () => buildDevSnapshot({ themeDir, previewData: defaultPreviewData() }),
+    );
+  } finally {
+    await fs.rm(themeDir, { recursive: true, force: true });
+  }
 });
 
 test('buildDevSnapshot serves canonical v0.5 routes, assets, and special files', async () => {
@@ -222,7 +229,7 @@ test('runDev rejects unsupported preview-data versions', async () => {
   try {
     await assert.rejects(
       () => runDev([themeDir, '--data', dataPath]),
-      /0\.5|version|INVALID_/,
+      /Invalid preview-data:/,
     );
   } finally {
     await fs.rm(themeDir, { recursive: true, force: true });
