@@ -16,7 +16,8 @@ const DEV_BUILD_OPTIONS = {
 
 export const DEFAULT_DEV_PORT = 4000;
 const PREVIEW_DATA_VERSION = '0.5';
-const PUBLIC_DIR_NAME = 'public';
+const DEFAULT_PUBLIC_DIR_NAME = 'public';
+const PUBLIC_DIR_ENV_NAME = 'ZEROPRESS_PUBLIC_DIR';
 
 const CONTENT_TYPES = new Map([
   ['.css', 'text/css; charset=utf-8'],
@@ -640,7 +641,8 @@ function getContentType(filePath) {
 }
 
 export function resolvePublicDir(cwd = process.cwd()) {
-  return path.resolve(cwd, PUBLIC_DIR_NAME);
+  const envValue = process.env[PUBLIC_DIR_ENV_NAME]?.trim();
+  return path.resolve(cwd, envValue || DEFAULT_PUBLIC_DIR_NAME);
 }
 
 export async function resolveExistingPublicDir(publicDir = resolvePublicDir()) {
@@ -680,7 +682,7 @@ export function assertPublicPathDoesNotOverlap(label, candidatePath, cwd = proce
     return;
   }
 
-  throw new Error(`${label} must not overlap the cwd public directory: ${resolvedCandidate}`);
+  throw new Error(`${label} must not overlap the public directory: ${resolvedCandidate}`);
 }
 
 function pathsOverlap(firstPath, secondPath) {

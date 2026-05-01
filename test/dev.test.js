@@ -15,9 +15,29 @@ import {
   runDev,
   resolveDevResponse,
   resolveExistingPublicDir,
+  resolvePublicDir,
   resolvePublicFileResponse,
   resolveSnapshotResponse,
 } from '../src/dev.js';
+
+function withPublicDirEnv(value, fn) {
+  const previousValue = process.env.ZEROPRESS_PUBLIC_DIR;
+  if (value === undefined) {
+    delete process.env.ZEROPRESS_PUBLIC_DIR;
+  } else {
+    process.env.ZEROPRESS_PUBLIC_DIR = value;
+  }
+
+  return Promise.resolve()
+    .then(fn)
+    .finally(() => {
+      if (previousValue === undefined) {
+        delete process.env.ZEROPRESS_PUBLIC_DIR;
+      } else {
+        process.env.ZEROPRESS_PUBLIC_DIR = previousValue;
+      }
+    });
+}
 
 async function createThemeDir(files) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-theme-dev-'));
@@ -335,6 +355,19 @@ test('resolveDevResponse serves exact public files as fallback', async () => {
   }
 });
 
+test('resolvePublicDir uses ZEROPRESS_PUBLIC_DIR when provided', async () => {
+  const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-theme-public-'));
+
+  try {
+    assert.equal(resolvePublicDir(cwd), path.join(cwd, 'public'));
+    await withPublicDirEnv('docs', () => {
+      assert.equal(resolvePublicDir(cwd), path.join(cwd, 'docs'));
+    });
+  } finally {
+    await fs.rm(cwd, { recursive: true, force: true });
+  }
+});
+
 test('resolvePublicFileResponse ignores private public entries', async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-theme-public-'));
   const publicDir = path.join(tempDir, 'public');
@@ -385,7 +418,7 @@ test('resolvePublicFileResponse does not serve files outside public', async () =
   }
 });
 
-test('runDev rejects theme directories that overlap cwd public', async () => {
+test('runDev rejects theme directories that overlap the public directory', async () => {
   const cwd = process.cwd();
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-theme-dev-'));
 
@@ -396,14 +429,57 @@ test('runDev rejects theme directories that overlap cwd public', async () => {
 
     await assert.rejects(
       () => runDev(['public']),
-      /Theme directory must not overlap the cwd public directory:/,
+      /Theme directory must not overlap the public directory:/,
     );
     await assert.rejects(
       () => runDev(['public/theme']),
-      /Theme directory must not overlap the cwd public directory:/,
+      /Theme directory must not overlap the public directory:/,
     );
   } finally {
     process.chdir(cwd);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('runDev rejects theme directories that overlap ZEROPRESS_PUBLIC_DIR', async () => {
+  const cwd = process.cwd();
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-theme-dev-'));
+
+  try {
+    process.chdir(tempDir);
+    await fs.mkdir(path.join(tempDir, 'docs', 'theme'), { recursive: true });
+    await fs.writeFile(path.join(tempDir, 'docs', 'theme', 'theme.json'), '{}', 'utf8');
+
+    await assert.rejects(
+      () => withPublicDirEnv('docs', () => runDev(['docs'])),
+      /Theme directory must not overlap the public directory:/,
+    );
+    await assert.rejects(
+      () => withPublicDirEnv('docs', () => runDev(['docs/theme'])),
+      /Theme directory must not overlap the public directory:/,
+    );
+  } finally {
+    process.chdir(cwd);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('runDev rejects a ZEROPRESS_PUBLIC_DIR path that is not a directory', async () => {
+  const cwd = process.cwd();
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-theme-dev-'));
+  const themeDir = await createThemeDir(validThemeFiles());
+
+  try {
+    process.chdir(tempDir);
+    await fs.writeFile(path.join(tempDir, 'docs'), 'not a directory', 'utf8');
+
+    await assert.rejects(
+      () => withPublicDirEnv('docs', () => runDev([themeDir])),
+      /Public path is not a directory:/,
+    );
+  } finally {
+    process.chdir(cwd);
+    await fs.rm(themeDir, { recursive: true, force: true });
     await fs.rm(tempDir, { recursive: true, force: true });
   }
 });
@@ -430,7 +506,7 @@ test('handleRequest injects live reload into public HTML fallback', async () => 
   }
 });
 
-test('resolveExistingPublicDir returns cwd public directory only when it exists as a directory', async () => {
+test('resolveExistingPublicDir returns a public directory only when it exists as a directory', async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-theme-public-'));
   const publicDir = path.join(tempDir, 'public');
 
