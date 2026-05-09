@@ -197,6 +197,23 @@ test('buildDevSnapshot serves canonical v0.5 routes, assets, and special files',
   }
 });
 
+test('buildDevSnapshot renders fallback robots.txt from site.indexing policy', async () => {
+  const themeDir = await createThemeDir(validThemeFiles());
+
+  try {
+    const previewData = defaultPreviewData();
+    previewData.site.indexing = false;
+
+    const snapshot = await buildDevSnapshot({ themeDir, previewData });
+    const robots = resolveSnapshotResponse('/robots.txt', snapshot);
+
+    assert.equal(robots.status, 200);
+    assert.equal(responseText(robots).trim(), 'User-agent: *\nDisallow: /');
+  } finally {
+    await fs.rm(themeDir, { recursive: true, force: true });
+  }
+});
+
 test('buildDevSnapshot matches encoded request paths against encoded output paths', async () => {
   const themeDir = await createThemeDir(validThemeFiles());
   const data = defaultPreviewData();
@@ -349,6 +366,30 @@ test('resolveDevResponse serves exact public files as fallback', async () => {
     assert.equal(markdown.contentType, 'text/markdown; charset=utf-8');
     assert.equal(responseText(markdown), '# Foo');
     assert.equal(missing.status, 404);
+  } finally {
+    await fs.rm(themeDir, { recursive: true, force: true });
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('resolveDevResponse serves public robots.txt before generated fallback robots', async () => {
+  const themeDir = await createThemeDir(validThemeFiles());
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-theme-public-'));
+  const publicDir = path.join(tempDir, 'public');
+
+  try {
+    await fs.mkdir(publicDir, { recursive: true });
+    await fs.writeFile(
+      path.join(publicDir, 'robots.txt'),
+      'User-agent: *\nDisallow: /\n\nUser-agent: Cloudflare-AI-Search\nAllow: /\n',
+      'utf8',
+    );
+
+    const snapshot = await buildDevSnapshot({ themeDir, previewData: defaultPreviewData(), publicDir });
+    const robots = await resolveDevResponse('/robots.txt', snapshot, publicDir);
+
+    assert.equal(robots.status, 200);
+    assert.equal(responseText(robots), 'User-agent: *\nDisallow: /\n\nUser-agent: Cloudflare-AI-Search\nAllow: /\n');
   } finally {
     await fs.rm(themeDir, { recursive: true, force: true });
     await fs.rm(tempDir, { recursive: true, force: true });

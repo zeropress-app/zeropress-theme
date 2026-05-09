@@ -65,13 +65,14 @@ export async function runDev(argv) {
     throw new Error(`Invalid port: ${flags.port}`);
   }
 
+  const publicDir = await resolveExistingPublicDir(resolvePublicDir());
   const buildSnapshot = async () => buildDevSnapshot({
     themeDir,
     previewData: await loadPreviewData(flags.data),
+    publicDir,
   });
 
   let snapshot = await buildSnapshot();
-  const publicDir = await resolveExistingPublicDir(resolvePublicDir());
   const server = http.createServer((req, res) => {
     handleRequest(req, res, snapshot, publicDir).catch((error) => {
       send(res, 500, 'text/plain; charset=utf-8', `Internal error: ${error.message}`);
@@ -427,13 +428,17 @@ export function defaultPreviewData() {
   };
 }
 
-export async function buildDevSnapshot({ themeDir, previewData }) {
+export async function buildDevSnapshot({ themeDir, previewData, publicDir = null }) {
   const writer = new MemoryWriter();
+  const hasPublicRobotsTxt = await publicRobotsTxtExists(publicDir);
   await buildSiteFromThemeDir({
     previewData,
     themeDir,
     writer,
-    options: DEV_BUILD_OPTIONS,
+    options: {
+      ...DEV_BUILD_OPTIONS,
+      generateRobotsTxt: !hasPublicRobotsTxt,
+    },
   });
 
   const files = new Map(
@@ -560,6 +565,24 @@ export async function resolvePublicFileResponse(pathname, publicDir = null) {
     contentType: getContentType(fullPath),
     body: await fs.readFile(fullPath),
   };
+}
+
+async function publicRobotsTxtExists(publicDir) {
+  if (!publicDir) {
+    return false;
+  }
+
+  let stat;
+  try {
+    stat = await fs.lstat(path.join(publicDir, 'robots.txt'));
+  } catch (error) {
+    if (error && error.code === 'ENOENT') {
+      return false;
+    }
+    throw error;
+  }
+
+  return stat.isFile();
 }
 
 export function resolveOutputPath(pathname) {

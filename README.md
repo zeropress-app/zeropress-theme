@@ -100,6 +100,8 @@ zeropress-theme dev ./my-theme --data ./preview-data.json
 - Falls back to files in the public directory when a route is not generated
 - The public directory defaults to `./public/`; set `ZEROPRESS_PUBLIC_DIR` to use a different public root
 - Generated output is served before public files when paths overlap
+- `robots.txt` is a fallback special file: if public `robots.txt` exists, the dev server serves that file instead of generated fallback robots output
+- Public `robots.txt` is served as-is. If it needs a `Sitemap` directive, add it to the file manually.
 - Hidden entries, `node_modules`, `Thumbs.db`, `*.key`, `*.pem`, and symlinks inside the public directory are ignored
 - The theme directory must not overlap with the resolved public directory
 - Starts on the preferred port, or the next available port unless `--strict-port` is used
