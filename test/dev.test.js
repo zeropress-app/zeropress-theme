@@ -372,6 +372,32 @@ test('resolveDevResponse serves exact public files as fallback', async () => {
   }
 });
 
+test('buildDevSnapshot injects discovered public favicon links', async () => {
+  const themeDir = await createThemeDir(validThemeFiles());
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-theme-public-'));
+  const publicDir = path.join(tempDir, 'public');
+
+  try {
+    await fs.mkdir(publicDir, { recursive: true });
+    await fs.writeFile(path.join(publicDir, 'favicon.ico'), 'icon', 'utf8');
+    await fs.writeFile(path.join(publicDir, 'favicon.svg'), '<svg></svg>', 'utf8');
+    await fs.writeFile(path.join(publicDir, 'favicon.png'), 'png', 'utf8');
+    await fs.writeFile(path.join(publicDir, 'apple-touch-icon.png'), 'apple', 'utf8');
+
+    const snapshot = await buildDevSnapshot({ themeDir, previewData: defaultPreviewData(), publicDir });
+    const response = await resolveSnapshotResponse('/index.html', snapshot);
+    const html = responseText(response);
+
+    assert.match(html, /<link rel="icon" href="\/favicon\.ico" sizes="any">/);
+    assert.match(html, /<link rel="icon" href="\/favicon\.svg" type="image\/svg\+xml">/);
+    assert.match(html, /<link rel="icon" href="\/favicon\.png" type="image\/png">/);
+    assert.match(html, /<link rel="apple-touch-icon" href="\/apple-touch-icon\.png">/);
+  } finally {
+    await fs.rm(themeDir, { recursive: true, force: true });
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('resolveDevResponse serves public robots.txt before generated fallback robots', async () => {
   const themeDir = await createThemeDir(validThemeFiles());
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-theme-public-'));

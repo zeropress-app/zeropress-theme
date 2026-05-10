@@ -18,6 +18,12 @@ export const DEFAULT_DEV_PORT = 4000;
 const PREVIEW_DATA_VERSION = '0.5';
 const DEFAULT_PUBLIC_DIR_NAME = 'public';
 const PUBLIC_DIR_ENV_NAME = 'ZEROPRESS_PUBLIC_DIR';
+const PUBLIC_FAVICON_FILES = Object.freeze({
+  icon: 'favicon.ico',
+  svg: 'favicon.svg',
+  png: 'favicon.png',
+  apple_touch_icon: 'apple-touch-icon.png',
+});
 
 const CONTENT_TYPES = new Map([
   ['.css', 'text/css; charset=utf-8'],
@@ -431,12 +437,14 @@ export function defaultPreviewData() {
 export async function buildDevSnapshot({ themeDir, previewData, publicDir = null }) {
   const writer = new MemoryWriter();
   const hasPublicRobotsTxt = await publicRobotsTxtExists(publicDir);
+  const publicFavicon = await discoverPublicFavicon(publicDir);
   await buildSiteFromThemeDir({
     previewData,
     themeDir,
     writer,
     options: {
       ...DEV_BUILD_OPTIONS,
+      favicon: publicFavicon,
       generateRobotsTxt: !hasPublicRobotsTxt,
     },
   });
@@ -583,6 +591,31 @@ async function publicRobotsTxtExists(publicDir) {
   }
 
   return stat.isFile();
+}
+
+export async function discoverPublicFavicon(publicDir) {
+  if (!publicDir) {
+    return undefined;
+  }
+
+  const favicon = {};
+  for (const [key, filename] of Object.entries(PUBLIC_FAVICON_FILES)) {
+    let stat;
+    try {
+      stat = await fs.lstat(path.join(publicDir, filename));
+    } catch (error) {
+      if (error && error.code === 'ENOENT') {
+        continue;
+      }
+      throw error;
+    }
+
+    if (stat.isFile()) {
+      favicon[key] = `/${filename}`;
+    }
+  }
+
+  return Object.keys(favicon).length ? favicon : undefined;
 }
 
 export function resolveOutputPath(pathname) {
