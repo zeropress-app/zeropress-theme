@@ -27,7 +27,7 @@ export async function runValidate(argv) {
     return 1;
   }
   if (result.warnings.length > 0) {
-    return strict ? 1 : 2;
+    return strict ? 1 : 0;
   }
   return 0;
 }

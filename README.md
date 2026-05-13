@@ -166,9 +166,8 @@ zeropress-theme validate ./dist/my-theme-1.0.0.zip --strict
 
 | Code | Meaning |
 | --- | --- |
-| `0` | No errors or warnings |
+| `0` | Valid theme, with or without warnings |
 | `1` | Errors found |
-| `2` | Warnings only |
 
 With `--strict`, warnings also return exit code `1`.
 

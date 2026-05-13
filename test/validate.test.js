@@ -155,9 +155,20 @@ test('runValidate accepts a zip file with macOS metadata', async () => {
 
   try {
     const code = await runValidate([zipPath]);
-    assert.equal(code, 2);
+    assert.equal(code, 0);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test('runValidate treats warnings as failures only in strict mode', async () => {
+  const themeDir = await createThemeDir(validThemeFiles());
+
+  try {
+    assert.equal(await runValidate([themeDir]), 0);
+    assert.equal(await runValidate([themeDir, '--strict']), 1);
+  } finally {
+    await fs.rm(themeDir, { recursive: true, force: true });
   }
 });
 
