@@ -24,6 +24,7 @@ const PUBLIC_FAVICON_FILES = Object.freeze({
   png: 'favicon.png',
   apple_touch_icon: 'apple-touch-icon.png',
 });
+const PUBLIC_SITEMAP_STYLESHEET_FILE = 'sitemap.xsl';
 
 const CONTENT_TYPES = new Map([
   ['.css', 'text/css; charset=utf-8'],
@@ -45,6 +46,7 @@ const CONTENT_TYPES = new Map([
   ['.woff', 'font/woff'],
   ['.woff2', 'font/woff2'],
   ['.xml', 'application/xml; charset=utf-8'],
+  ['.xsl', 'application/xslt+xml; charset=utf-8'],
 ]);
 
 const SPECIAL_FILE_PATHS = new Set([
@@ -439,6 +441,7 @@ export async function buildDevSnapshot({ themeDir, previewData, publicDir = null
   const writer = new MemoryWriter();
   const hasPublicRobotsTxt = await publicRobotsTxtExists(publicDir);
   const publicFavicon = await discoverPublicFavicon(publicDir);
+  const sitemapStylesheetHref = await discoverPublicSitemapStylesheet(publicDir);
   await buildSiteFromThemeDir({
     previewData,
     themeDir,
@@ -446,6 +449,7 @@ export async function buildDevSnapshot({ themeDir, previewData, publicDir = null
     options: {
       ...DEV_BUILD_OPTIONS,
       favicon: publicFavicon,
+      sitemapStylesheetHref,
       generateRobotsTxt: !hasPublicRobotsTxt,
     },
   });
@@ -617,6 +621,24 @@ export async function discoverPublicFavicon(publicDir) {
   }
 
   return Object.keys(favicon).length ? favicon : undefined;
+}
+
+export async function discoverPublicSitemapStylesheet(publicDir) {
+  if (!publicDir) {
+    return undefined;
+  }
+
+  let stat;
+  try {
+    stat = await fs.lstat(path.join(publicDir, PUBLIC_SITEMAP_STYLESHEET_FILE));
+  } catch (error) {
+    if (error && error.code === 'ENOENT') {
+      return undefined;
+    }
+    throw error;
+  }
+
+  return stat.isFile() ? `/${PUBLIC_SITEMAP_STYLESHEET_FILE}` : undefined;
 }
 
 export function resolveOutputPath(pathname) {

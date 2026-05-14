@@ -107,6 +107,7 @@ zeropress-theme dev ./my-theme --data ./preview-data.json --public-dir ./public
 - `robots.txt` is a fallback special file: if public `robots.txt` exists, the dev server serves that file instead of generated fallback robots output
 - Public `robots.txt` is served as-is. If it needs a `Sitemap` directive, add it to the file manually.
 - Root-level public favicon files named `favicon.ico`, `favicon.svg`, `favicon.png`, and `apple-touch-icon.png` are auto-discovered and injected into generated HTML `<head>` output unless preview-data already defines `site.favicon`
+- A root-level public `sitemap.xsl` is served as-is. When ZeroPress generates `sitemap.xml`, it auto-discovers that file and adds an XML stylesheet processing instruction for `/sitemap.xsl`.
 - Hidden entries, `node_modules`, `Thumbs.db`, `*.key`, `*.pem`, and symlinks inside the public directory are ignored
 - The theme directory must not overlap with the resolved public directory
 - Starts on the preferred port, or the next available port unless `--strict-port` is used

@@ -398,6 +398,32 @@ test('buildDevSnapshot injects discovered public favicon links', async () => {
   }
 });
 
+test('buildDevSnapshot links root public sitemap.xsl from generated sitemap', async () => {
+  const themeDir = await createThemeDir(validThemeFiles());
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-theme-public-'));
+  const publicDir = path.join(tempDir, 'public');
+
+  try {
+    await fs.mkdir(publicDir, { recursive: true });
+    await fs.writeFile(path.join(publicDir, 'sitemap.xsl'), '<xsl:stylesheet version="1.0"></xsl:stylesheet>', 'utf8');
+
+    const snapshot = await buildDevSnapshot({ themeDir, previewData: defaultPreviewData(), publicDir });
+    const sitemap = resolveSnapshotResponse('/sitemap.xml', snapshot);
+    const stylesheet = await resolveDevResponse('/sitemap.xsl', snapshot, publicDir);
+
+    assert.match(
+      responseText(sitemap),
+      /^<\?xml version="1\.0" encoding="UTF-8"\?>\n<\?xml-stylesheet type="text\/xsl" href="\/sitemap\.xsl"\?>\n<urlset/,
+    );
+    assert.equal(stylesheet.status, 200);
+    assert.equal(stylesheet.contentType, 'application/xslt+xml; charset=utf-8');
+    assert.equal(responseText(stylesheet), '<xsl:stylesheet version="1.0"></xsl:stylesheet>');
+  } finally {
+    await fs.rm(themeDir, { recursive: true, force: true });
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('resolveDevResponse serves public robots.txt before generated fallback robots', async () => {
   const themeDir = await createThemeDir(validThemeFiles());
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-theme-public-'));
