@@ -429,6 +429,7 @@ test('resolvePublicDir uses ZEROPRESS_PUBLIC_DIR when provided', async () => {
     assert.equal(resolvePublicDir(cwd), path.join(cwd, 'public'));
     await withPublicDirEnv('docs', () => {
       assert.equal(resolvePublicDir(cwd), path.join(cwd, 'docs'));
+      assert.equal(resolvePublicDir(cwd, 'assets'), path.join(cwd, 'assets'));
     });
   } finally {
     await fs.rm(cwd, { recursive: true, force: true });
@@ -531,6 +532,29 @@ test('runDev rejects theme directories that overlap ZEROPRESS_PUBLIC_DIR', async
   }
 });
 
+test('runDev rejects theme directories that overlap --public-dir', async () => {
+  const cwd = process.cwd();
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-theme-dev-'));
+
+  try {
+    process.chdir(tempDir);
+    await fs.mkdir(path.join(tempDir, 'docs', 'theme'), { recursive: true });
+    await fs.writeFile(path.join(tempDir, 'docs', 'theme', 'theme.json'), '{}', 'utf8');
+
+    await assert.rejects(
+      () => runDev(['docs', '--public-dir', 'docs']),
+      /Theme directory must not overlap the public directory:/,
+    );
+    await assert.rejects(
+      () => runDev(['docs/theme', '--public-dir', 'docs']),
+      /Theme directory must not overlap the public directory:/,
+    );
+  } finally {
+    process.chdir(cwd);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('runDev rejects a ZEROPRESS_PUBLIC_DIR path that is not a directory', async () => {
   const cwd = process.cwd();
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-theme-dev-'));
@@ -542,6 +566,26 @@ test('runDev rejects a ZEROPRESS_PUBLIC_DIR path that is not a directory', async
 
     await assert.rejects(
       () => withPublicDirEnv('docs', () => runDev([themeDir])),
+      /Public path is not a directory:/,
+    );
+  } finally {
+    process.chdir(cwd);
+    await fs.rm(themeDir, { recursive: true, force: true });
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('runDev rejects a --public-dir path that is not a directory', async () => {
+  const cwd = process.cwd();
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-theme-dev-'));
+  const themeDir = await createThemeDir(validThemeFiles());
+
+  try {
+    process.chdir(tempDir);
+    await fs.writeFile(path.join(tempDir, 'docs'), 'not a directory', 'utf8');
+
+    await assert.rejects(
+      () => runDev([themeDir, '--public-dir', 'docs']),
       /Public path is not a directory:/,
     );
   } finally {

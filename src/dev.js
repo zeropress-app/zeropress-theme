@@ -62,7 +62,8 @@ export async function runDev(argv) {
     throw new Error('dev requires a themeDir argument');
   }
   const themeDir = getThemeDir(positional[0]);
-  assertPublicPathDoesNotOverlap('Theme directory', themeDir);
+  const effectivePublicDir = resolvePublicDir(process.cwd(), flags.publicDir);
+  assertPublicPathDoesNotOverlap('Theme directory', themeDir, process.cwd(), effectivePublicDir);
   const host = flags.host || '127.0.0.1';
   const port = Number(flags.port || DEFAULT_DEV_PORT);
   const strictPort = flags.strictPort === true;
@@ -71,7 +72,7 @@ export async function runDev(argv) {
     throw new Error(`Invalid port: ${flags.port}`);
   }
 
-  const publicDir = await resolveExistingPublicDir(resolvePublicDir());
+  const publicDir = await resolveExistingPublicDir(effectivePublicDir);
   const buildSnapshot = async () => buildDevSnapshot({
     themeDir,
     previewData: await loadPreviewData(flags.data),
@@ -195,12 +196,12 @@ function parseDevArgs(argv) {
       continue;
     }
 
-    if (key === 'port' || key === 'host' || key === 'data') {
+    if (key === 'port' || key === 'host' || key === 'data' || key === 'public-dir') {
       const value = argv[i + 1];
       if (!value) {
         throw new Error(`--${key} requires a value`);
       }
-      flags[key] = value;
+      flags[key === 'public-dir' ? 'publicDir' : key] = value;
       i += 1;
       continue;
     }
@@ -696,7 +697,10 @@ function getContentType(filePath) {
   return CONTENT_TYPES.get(path.extname(filePath).toLowerCase()) || 'application/octet-stream';
 }
 
-export function resolvePublicDir(cwd = process.cwd()) {
+export function resolvePublicDir(cwd = process.cwd(), publicDir) {
+  if (publicDir) {
+    return path.resolve(cwd, publicDir);
+  }
   const envValue = process.env[PUBLIC_DIR_ENV_NAME]?.trim();
   return path.resolve(cwd, envValue || DEFAULT_PUBLIC_DIR_NAME);
 }
@@ -731,8 +735,7 @@ export function shouldIgnorePublicEntry(name) {
   );
 }
 
-export function assertPublicPathDoesNotOverlap(label, candidatePath, cwd = process.cwd()) {
-  const publicDir = resolvePublicDir(cwd);
+export function assertPublicPathDoesNotOverlap(label, candidatePath, cwd = process.cwd(), publicDir = resolvePublicDir(cwd)) {
   const resolvedCandidate = path.resolve(cwd, candidatePath);
   if (!pathsOverlap(publicDir, resolvedCandidate)) {
     return;

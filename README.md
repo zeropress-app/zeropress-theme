@@ -34,7 +34,7 @@ npx @zeropress/theme dev ./my-theme
 ## Usage
 
 ```bash
-zeropress-theme dev <themeDir> [--data <path>] [--host <ip>] [--port <n>] [--strict-port] [--open]
+zeropress-theme dev <themeDir> [--data <path>] [--public-dir <dir>] [--host <ip>] [--port <n>] [--strict-port] [--open]
 zeropress-theme validate <themeDir|theme.zip> [--strict] [--json]
 zeropress-theme pack <themeDir> [--out <dir>] [--name <zipFile>] [--dry-run]
 ```
@@ -70,7 +70,7 @@ Launches a local preview server with WebSocket-based live reload.
 #### Usage
 
 ```bash
-zeropress-theme dev <themeDir> [--data <path>] [--host <ip>] [--port <n>] [--strict-port] [--open]
+zeropress-theme dev <themeDir> [--data <path>] [--public-dir <dir>] [--host <ip>] [--port <n>] [--strict-port] [--open]
 ```
 
 #### Arguments
@@ -82,6 +82,7 @@ zeropress-theme dev <themeDir> [--data <path>] [--host <ip>] [--port <n>] [--str
 | Option | Description | Default |
 | --- | --- | --- |
 | `--data <path>` | Local preview-data v0.5 JSON file | Built-in sample data |
+| `--public-dir <dir>` | Public passthrough directory | `./public` |
 | `--host <ip>` | Bind address | `127.0.0.1` |
 | `--port <n>` | Preferred server port | `4000` |
 | `--strict-port` | Fail when the preferred port is already in use instead of trying the next port | — |
@@ -92,13 +93,16 @@ zeropress-theme dev <themeDir> [--data <path>] [--host <ip>] [--port <n>] [--str
 ```bash
 zeropress-theme dev ./my-theme
 zeropress-theme dev ./my-theme --data ./preview-data.json
+zeropress-theme dev ./my-theme --data ./preview-data.json --public-dir ./public
 ```
 
 #### Notes
 
 - Builds the theme through `@zeropress/build-core` and serves the latest in-memory output snapshot
 - Falls back to files in the public directory when a route is not generated
-- The public directory defaults to `./public/`; set `ZEROPRESS_PUBLIC_DIR` to use a different public root
+- The public directory defaults to `./public/`; use `--public-dir <dir>` or `ZEROPRESS_PUBLIC_DIR` when a project needs a different public root
+- Precedence is `--public-dir` > `ZEROPRESS_PUBLIC_DIR` > `./public/`
+- Relative public directory values are resolved from the current working directory
 - Generated output is served before public files when paths overlap
 - `robots.txt` is a fallback special file: if public `robots.txt` exists, the dev server serves that file instead of generated fallback robots output
 - Public `robots.txt` is served as-is. If it needs a `Sitemap` directive, add it to the file manually.
