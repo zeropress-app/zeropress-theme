@@ -81,7 +81,7 @@ zeropress-theme dev <themeDir> [--data <path>] [--public-dir <dir>] [--host <ip>
 
 | Option | Description | Default |
 | --- | --- | --- |
-| `--data <path>` | Local preview-data v0.5 JSON file | Built-in sample data |
+| `--data <path>` | Local preview-data v0.6 JSON file | Built-in sample data |
 | `--public-dir <dir>` | Public passthrough directory | `./public` |
 | `--host <ip>` | Bind address | `127.0.0.1` |
 | `--port <n>` | Preferred server port | `4000` |
@@ -115,7 +115,7 @@ zeropress-theme dev ./my-theme --data ./preview-data.json --public-dir ./public
 - Watches the public directory too when it exists at startup; creating it after startup requires restarting `dev`
 - Non-matching routes return `404`
 - If `404.html` exists at theme root, it is rendered; otherwise a built-in fallback page is used
-- `dev` only accepts canonical preview-data v0.5
+- `dev` only accepts canonical preview-data v0.6
 - `--data` must point to a local file path
 - Built-in sample data includes enabled `primary` and `footer` menus for `{{menu:*}}` previews
 - Post templates can render a theme-owned comments island by checking `{{#if post.comments_enabled}}`
@@ -123,7 +123,7 @@ zeropress-theme dev ./my-theme --data ./preview-data.json --public-dir ./public
 
 ### `validate`
 
-Validates a theme directory or packaged zip against Theme Runtime v0.5.
+Validates a theme directory or packaged zip against Theme Runtime v0.6.
 
 #### Usage
 
@@ -235,7 +235,7 @@ zeropress-theme pack ./theme --out ./artifacts
 ## Related
 
 - [create-zeropress-theme](https://www.npmjs.com/package/create-zeropress-theme)
-- [ZeroPress Theme Runtime v0.5](https://zeropress.dev/spec/theme-runtime-v0.5.html)
+- [ZeroPress Theme Runtime v0.6](https://zeropress.dev/spec/theme-runtime-v0.6.html)
 
 ---
 

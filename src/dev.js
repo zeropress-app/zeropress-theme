@@ -15,7 +15,7 @@ const DEV_BUILD_OPTIONS = {
 };
 
 export const DEFAULT_DEV_PORT = 4000;
-const PREVIEW_DATA_VERSION = '0.5';
+const PREVIEW_DATA_VERSION = '0.6';
 const DEFAULT_PUBLIC_DIR_NAME = 'public';
 const PUBLIC_DIR_ENV_NAME = 'ZEROPRESS_PUBLIC_DIR';
 const PUBLIC_FAVICON_FILES = Object.freeze({
@@ -303,13 +303,13 @@ export function defaultPreviewData() {
       title: 'ZeroPress Preview',
       description: 'Default preview data',
       url: 'https://example.com',
-      mediaBaseUrl: 'https://media.example.com',
+      media_base_url: 'https://media.example.com',
       locale: 'en-US',
-      postsPerPage: 2,
-      dateFormat: 'YYYY-MM-DD',
-      timeFormat: 'HH:mm',
+      posts_per_page: 2,
+      date_format: 'YYYY-MM-DD',
+      time_format: 'HH:mm',
       timezone: 'UTC',
-      disallowComments: false,
+      disallow_comments: false,
     },
     content: {
       authors: [

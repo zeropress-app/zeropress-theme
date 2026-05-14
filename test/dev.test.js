@@ -59,7 +59,7 @@ function validThemeFiles() {
       slug: 'dev-theme',
       version: '1.0.0',
       license: 'MIT',
-      runtime: '0.5',
+      runtime: '0.6',
       description: 'A test theme',
     }),
     'layout.html': '<html><head><title>{{meta.title}}</title>{{meta.head_tags}}</head><body>{{slot:header}}<main>{{slot:content}}</main>{{slot:footer}}</body></html>',
@@ -131,7 +131,7 @@ function createFakeResponse() {
   };
 }
 
-test('defaultPreviewData builds a valid v0.5 dev snapshot', async () => {
+test('defaultPreviewData builds a valid v0.6 dev snapshot', async () => {
   const themeDir = await createThemeDir(validThemeFiles());
 
   try {
@@ -143,7 +143,7 @@ test('defaultPreviewData builds a valid v0.5 dev snapshot', async () => {
   }
 });
 
-test('buildDevSnapshot serves canonical v0.5 routes, assets, and special files', async () => {
+test('buildDevSnapshot serves canonical v0.6 routes, assets, and special files', async () => {
   const themeDir = await createThemeDir(validThemeFiles());
 
   try {
