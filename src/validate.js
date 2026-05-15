@@ -20,7 +20,7 @@ export async function runValidate(argv) {
   if (json) {
     process.stdout.write(`${JSON.stringify(toJsonOutput(result), null, 2)}\n`);
   } else {
-    printHuman(result, target);
+    printHuman(result, target, { strict });
   }
 
   if (result.errors.length > 0) {
@@ -130,25 +130,97 @@ async function resolveValidationTarget(inputPath) {
   throw new Error(`Validate expects a theme directory or .zip file: ${inputPath}`);
 }
 
-function printHuman(result, target) {
+function printHuman(result, target, options = {}) {
   const label = target.type === 'zip' ? 'theme zip' : 'theme directory';
-  console.log(`Validating ${label}: ${target.path}`);
+  const color = createColor(process.stdout);
+  const warnings = groupHumanWarnings(result.warnings);
+  const blocks = [];
+  const status = validationStatus(result, options);
+  blocks.push([
+    colorStatus(status.title, status.level, color),
+    `Target: ${label}: ${target.path}`,
+    `Errors: ${result.errors.length}`,
+    `Warnings: ${result.warnings.length}`,
+    `Checked files: ${result.checkedFiles}`,
+  ].join('\n'));
+
   for (const error of result.errors) {
-    console.log(formatHumanIssue('ERROR', error));
+    blocks.push(formatHumanIssue('error', error, { color }));
   }
-  for (const warning of result.warnings) {
-    console.log(formatHumanIssue('WARN ', warning));
+  for (const warning of warnings) {
+    blocks.push(formatHumanIssue('warning', warning, { color }));
   }
-  if (result.errors.length === 0 && result.warnings.length === 0) {
-    console.log('OK Theme is valid');
-  }
+
+  blocks.push(colorStatus(status.result, status.level, color));
+  console.log(blocks.join('\n\n'));
 }
 
-function formatHumanIssue(level, issue) {
-  const lines = [
-    `${level} ${issue.code}`,
-    `File: ${issue.path}`,
+function validationStatus(result, options) {
+  if (result.errors.length > 0) {
+    return {
+      level: 'error',
+      title: 'Theme validation failed',
+      result: `Result: failed because ${result.errors.length} error(s) were found.`,
+    };
+  }
+
+  if (result.warnings.length > 0 && options.strict) {
+    return {
+      level: 'error',
+      title: 'Theme validation failed',
+      result: `Result: failed because --strict treats ${result.warnings.length} warning(s) as failures.`,
+    };
+  }
+
+  if (result.warnings.length > 0) {
+    return {
+      level: 'warning',
+      title: 'Theme validation passed with warnings',
+      result: `Result: passed with ${result.warnings.length} warning(s).`,
+    };
+  }
+
+  return {
+    level: 'success',
+    title: 'Theme validation passed',
+    result: 'Result: passed with no errors or warnings.',
+  };
+}
+
+function groupHumanWarnings(warnings) {
+  const optionalTemplateWarnings = warnings.filter((warning) => warning.code === 'MISSING_OPTIONAL_TEMPLATE');
+  const otherWarnings = warnings.filter((warning) => warning.code !== 'MISSING_OPTIONAL_TEMPLATE');
+
+  if (optionalTemplateWarnings.length === 0) {
+    return otherWarnings;
+  }
+
+  return [
+    ...otherWarnings,
+    {
+      code: 'MISSING_OPTIONAL_TEMPLATES',
+      severity: 'warning',
+      paths: optionalTemplateWarnings.map((warning) => warning.path),
+      message: 'Optional route templates are missing.',
+      hint: 'This does not block validation. Add these files only if the theme wants archive, category, or tag pages.',
+    },
   ];
+}
+
+function formatHumanIssue(level, issue, options = {}) {
+  const color = options.color || createColor(process.stdout);
+  const lines = [`${formatIssueLevel(level, color)} ${color.bold(issue.code)}`];
+  if (Array.isArray(issue.paths) && issue.paths.length > 0) {
+    lines.push(`Files: ${issue.paths.join(', ')}`);
+  } else {
+    const location = splitIssuePath(issue.path);
+    if (location.file) {
+      lines.push(`File: ${location.file}`);
+    }
+    if (location.path) {
+      lines.push(`Path: ${location.path}`);
+    }
+  }
   if (issue.line) {
     const location = issue.column ? `Line: ${issue.line}, Column: ${issue.column}` : `Line: ${issue.line}`;
     lines.push(location);
@@ -157,10 +229,64 @@ function formatHumanIssue(level, issue) {
     lines.push(`Category: ${issue.category}`);
   }
   lines.push(`Reason: ${issue.message}`);
+  if (issue.snippet) {
+    const lineLabel = issue.line ? String(issue.line) : '';
+    lines.push('', `${lineLabel} | ${issue.snippet.line}`, `${' '.repeat(lineLabel.length)} | ${issue.snippet.pointer}`);
+  }
   if (issue.hint) {
     lines.push('', 'Hint:', issue.hint);
   }
   return lines.join('\n');
+}
+
+function splitIssuePath(issuePath) {
+  const normalizedPath = String(issuePath || '');
+  if (normalizedPath.startsWith('theme.json.')) {
+    return {
+      file: 'theme.json',
+      path: normalizedPath.slice('theme.json.'.length),
+    };
+  }
+
+  return { file: normalizedPath, path: '' };
+}
+
+function colorStatus(value, level, color) {
+  if (level === 'error') {
+    return color.red(value);
+  }
+  if (level === 'warning') {
+    return color.yellow(value);
+  }
+  return color.green(value);
+}
+
+function formatIssueLevel(level, color) {
+  if (level === 'error') {
+    return color.red('ERROR');
+  }
+  return color.yellow('WARN ');
+}
+
+function createColor(stream) {
+  const enabled = colorsEnabled(stream);
+  const wrap = (code, value) => (enabled ? `\x1b[${code}m${value}\x1b[0m` : value);
+  return {
+    red: (value) => wrap('31', value),
+    yellow: (value) => wrap('33', value),
+    green: (value) => wrap('32', value),
+    bold: (value) => wrap('1', value),
+  };
+}
+
+function colorsEnabled(stream) {
+  if (process.env.NO_COLOR) {
+    return false;
+  }
+  if (process.env.FORCE_COLOR && process.env.FORCE_COLOR !== '0') {
+    return true;
+  }
+  return Boolean(stream?.isTTY);
 }
 
 function toJsonOutput(result) {
