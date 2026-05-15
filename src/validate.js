@@ -134,14 +134,33 @@ function printHuman(result, target) {
   const label = target.type === 'zip' ? 'theme zip' : 'theme directory';
   console.log(`Validating ${label}: ${target.path}`);
   for (const error of result.errors) {
-    console.log(`ERROR ${error.code} ${error.path}: ${error.message}`);
+    console.log(formatHumanIssue('ERROR', error));
   }
   for (const warning of result.warnings) {
-    console.log(`WARN  ${warning.code} ${warning.path}: ${warning.message}`);
+    console.log(formatHumanIssue('WARN ', warning));
   }
   if (result.errors.length === 0 && result.warnings.length === 0) {
     console.log('OK Theme is valid');
   }
+}
+
+function formatHumanIssue(level, issue) {
+  const lines = [
+    `${level} ${issue.code}`,
+    `File: ${issue.path}`,
+  ];
+  if (issue.line) {
+    const location = issue.column ? `Line: ${issue.line}, Column: ${issue.column}` : `Line: ${issue.line}`;
+    lines.push(location);
+  }
+  if (issue.category) {
+    lines.push(`Category: ${issue.category}`);
+  }
+  lines.push(`Reason: ${issue.message}`);
+  if (issue.hint) {
+    lines.push('', 'Hint:', issue.hint);
+  }
+  return lines.join('\n');
 }
 
 function toJsonOutput(result) {

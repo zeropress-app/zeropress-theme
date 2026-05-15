@@ -97,6 +97,37 @@ test('runValidate returns 1 and emits json for invalid theme in strict json mode
   }
 });
 
+test('runValidate prints theme validation location and hint in human output', async () => {
+  const files = validThemeFiles();
+  files['layout.html'] = [
+    '<html>',
+    '<head><script src="/theme.js"></script></head>',
+    '<body>{{slot:content}}</body>',
+    '</html>',
+  ].join('\n');
+  const themeDir = await createThemeDir(files);
+  const logs = [];
+  const originalLog = console.log;
+  console.log = (message) => {
+    logs.push(String(message));
+  };
+
+  try {
+    const code = await runValidate([themeDir]);
+    assert.equal(code, 1);
+    const output = logs.join('\n');
+    assert.match(output, /ERROR LAYOUT_SCRIPT_NOT_ALLOWED/);
+    assert.match(output, /File: layout\.html/);
+    assert.match(output, /Line: 2, Column: 7/);
+    assert.match(output, /Category: theme_validation/);
+    assert.match(output, /Hint:/);
+    assert.match(output, /\{\{partial:content-enhancements\}\}/);
+  } finally {
+    console.log = originalLog;
+    await fs.rm(themeDir, { recursive: true, force: true });
+  }
+});
+
 test('runValidate requires a themeDir or theme.zip argument', async () => {
   await assert.rejects(
     () => runValidate([]),
