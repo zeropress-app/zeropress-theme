@@ -4,11 +4,21 @@
 ![license](https://img.shields.io/npm/l/%40zeropress%2Ftheme)
 ![node](https://img.shields.io/node/v/%40zeropress%2Ftheme)
 
-ZeroPress theme development toolkit.
+Public ZeroPress theme developer toolkit for Theme Runtime v0.6.
 
-This package provides the public CLI for previewing, validating, and packaging ZeroPress themes.
+This package provides the CLI for previewing, validating, and packaging ZeroPress themes.
 
----
+It uses directly:
+
+- [@zeropress/build-core](https://www.npmjs.com/package/@zeropress/build-core) for dev-server preview rendering
+- [@zeropress/theme-validator](https://www.npmjs.com/package/@zeropress/theme-validator) for theme manifest and file validation
+
+Public contract references:
+
+- [Theme Runtime v0.6 Spec](https://zeropress.dev/spec/theme-runtime-v0.6.html)
+- [Theme Runtime v0.6 Schema](https://zeropress.dev/schemas/theme.v0.6.runtime.schema.json)
+- [Preview Data v0.6 Spec](https://zeropress.dev/spec/preview-data-v0.6.html)
+- [Preview Data v0.6 Schema](https://zeropress.dev/schemas/preview-data.v0.6.schema.json)
 
 ## Install
 
@@ -21,15 +31,58 @@ npm install -g @zeropress/theme
 zeropress-theme --help
 ```
 
----
-
 ## Quick Start
 
+If you do not already have a ZeroPress theme and preview-data file, create a starter project first:
+
 ```bash
-npx @zeropress/theme dev ./my-theme
+npx @zeropress/create-theme --name my-minimal --template minimal
 ```
 
----
+Then preview the generated theme with the generated preview data:
+
+```bash
+npx @zeropress/theme dev ./my-minimal/theme --data ./my-minimal/preview-data.json
+```
+
+If you already have a theme and preview-data file:
+
+```bash
+npx @zeropress/theme dev ./my-theme --data ./preview-data.json
+```
+
+`@zeropress/create-theme` creates a starter theme and matching preview-data fixture. `@zeropress/theme` previews, validates, and packages that theme.
+
+## Typical Workflow
+
+`@zeropress/theme` is the theme authoring tool. A common workflow is:
+
+1. Create a starter theme and preview fixture, if needed:
+
+```bash
+npx @zeropress/create-theme --name my-minimal --template minimal
+```
+
+2. Preview and iterate on the theme:
+
+```bash
+npx @zeropress/theme dev ./my-minimal/theme --data ./my-minimal/preview-data.json
+```
+
+3. Validate or package the theme:
+
+```bash
+npx @zeropress/theme validate ./my-minimal/theme
+npx @zeropress/theme pack ./my-minimal/theme --out ./artifacts
+```
+
+4. Build a static site with the finished theme:
+
+```bash
+npx @zeropress/build ./my-minimal/theme --data ./my-minimal/preview-data.json --out ./dist
+```
+
+For Markdown-first sites, use [@zeropress/build-pages](https://www.npmjs.com/package/@zeropress/build-pages) instead of writing preview-data by hand.
 
 ## Usage
 
@@ -49,8 +102,6 @@ zeropress-theme pack <themeDir> [--out <dir>] [--name <zipFile>] [--dry-run]
 - `--help, -h`: Show help
 - `--version, -v`: Show version
 
----
-
 ## Examples
 
 ```bash
@@ -58,8 +109,6 @@ zeropress-theme dev ./my-theme --data ./preview-data.json
 zeropress-theme validate ./my-theme --strict
 zeropress-theme pack ./my-theme --out ./artifacts
 ```
-
----
 
 ## Commands
 
@@ -103,6 +152,8 @@ zeropress-theme dev ./my-theme --data ./preview-data.json --public-dir ./public
 - The public directory defaults to `./public/`; use `--public-dir <dir>` or `ZEROPRESS_PUBLIC_DIR` when a project needs a different public root
 - Precedence is `--public-dir` > `ZEROPRESS_PUBLIC_DIR` > `./public/`
 - Relative public directory values are resolved from the current working directory
+- If the resolved public path does not exist, `dev` runs without public fallback
+- If the resolved public path exists, it must be a real directory; files and symlinked directories are rejected
 - Generated output is served before public files when paths overlap
 - `robots.txt` is a fallback special file: if public `robots.txt` exists, the dev server serves that file instead of generated fallback robots output
 - Public `robots.txt` is served as-is. If it needs a `Sitemap` directive, add it to the file manually.
@@ -195,7 +246,7 @@ zeropress-theme pack <themeDir> [--out <dir>] [--name <zipFile>] [--dry-run]
 | Option | Description | Default |
 | --- | --- | --- |
 | `--out <dir>` | Output directory | `dist` |
-| `--name <zipFile>` | Zip filename | `{name}-{version}.zip` |
+| `--name <zipFile>` | Zip filename | `{namespace}.{slug}@{version}.zip` |
 | `--dry-run` | Print the output path and included files without writing a zip | — |
 
 #### Examples
@@ -213,8 +264,6 @@ zeropress-theme pack ./my-theme --out ./artifacts
 - Re-validates the generated archive
 - With `--dry-run`, prints the output path and included files without creating a zip
 
----
-
 ## CI Usage
 
 ```bash
@@ -223,22 +272,6 @@ zeropress-theme validate ./artifacts/theme-1.0.0.zip --strict
 zeropress-theme pack ./theme --dry-run
 zeropress-theme pack ./theme --out ./artifacts
 ```
-
----
-
-## Requirements
-
-- Node.js >= 18.18.0
-- ESM only
-
----
-
-## Related
-
-- [create-zeropress-theme](https://www.npmjs.com/package/create-zeropress-theme)
-- [ZeroPress Theme Runtime v0.6](https://zeropress.dev/spec/theme-runtime-v0.6.html)
-
----
 
 ## License
 

@@ -21,7 +21,10 @@ export async function runPack(argv) {
 
   const themeJsonRaw = await fs.readFile(path.join(themeDir, 'theme.json'), 'utf8');
   const themeJson = JSON.parse(themeJsonRaw);
-  const defaultName = `${sanitizeFileName(themeJson.name)}-${sanitizeFileName(themeJson.version)}.zip`;
+  const defaultName = [
+    `${sanitizeFileName(themeJson.namespace)}.${sanitizeFileName(themeJson.slug)}`,
+    sanitizeFileName(themeJson.version),
+  ].join('@') + '.zip';
   const fileName = flags.name || defaultName;
   const zipPath = path.join(outDir, fileName);
 

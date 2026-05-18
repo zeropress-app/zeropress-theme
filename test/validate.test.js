@@ -297,7 +297,7 @@ test('runPack --dry-run prints output plan without writing zip', async () => {
   };
   const themeDir = await createThemeDir(files);
   const outDir = path.join(themeDir, 'artifacts');
-  const expectedZipPath = path.join(outDir, 'test-theme-1.0.0.zip');
+  const expectedZipPath = path.join(outDir, 'test-studio.test-theme@1.0.0.zip');
   const logs = [];
   const originalLog = console.log;
   console.log = (...args) => {
