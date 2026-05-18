@@ -37,6 +37,10 @@ async function createZipFile(files, options = {}) {
   return { root, zipPath };
 }
 
+function stripAnsi(value) {
+  return value.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '');
+}
+
 function validThemeFiles() {
   return {
     'theme.json': JSON.stringify({
@@ -115,7 +119,7 @@ test('runValidate prints theme validation location and hint in human output', as
   try {
     const code = await runValidate([themeDir]);
     assert.equal(code, 1);
-    const output = logs.join('\n');
+    const output = stripAnsi(logs.join('\n'));
     assert.match(output, /ERROR LAYOUT_SCRIPT_NOT_ALLOWED/);
     assert.match(output, /File: layout\.html/);
     assert.match(output, /Line: 2, Column: 7/);
@@ -124,6 +128,49 @@ test('runValidate prints theme validation location and hint in human output', as
     assert.match(output, /\{\{partial:content-enhancements\}\}/);
   } finally {
     console.log = originalLog;
+    await fs.rm(themeDir, { recursive: true, force: true });
+  }
+});
+
+test('runValidate keeps forced-color human output searchable after ANSI stripping', async () => {
+  const files = validThemeFiles();
+  files['layout.html'] = [
+    '<html>',
+    '<head><script src="/theme.js"></script></head>',
+    '<body>{{slot:content}}</body>',
+    '</html>',
+  ].join('\n');
+  const themeDir = await createThemeDir(files);
+  const logs = [];
+  const originalLog = console.log;
+  const originalNoColor = process.env.NO_COLOR;
+  const originalForceColor = process.env.FORCE_COLOR;
+
+  console.log = (message) => {
+    logs.push(String(message));
+  };
+  delete process.env.NO_COLOR;
+  process.env.FORCE_COLOR = '1';
+
+  try {
+    const code = await runValidate([themeDir]);
+    assert.equal(code, 1);
+    const output = logs.join('\n');
+    assert.match(output, /\x1B\[/);
+    assert.match(stripAnsi(output), /ERROR LAYOUT_SCRIPT_NOT_ALLOWED/);
+    assert.match(stripAnsi(output), /WARN  MISSING_OPTIONAL_TEMPLATES/);
+  } finally {
+    console.log = originalLog;
+    if (originalNoColor === undefined) {
+      delete process.env.NO_COLOR;
+    } else {
+      process.env.NO_COLOR = originalNoColor;
+    }
+    if (originalForceColor === undefined) {
+      delete process.env.FORCE_COLOR;
+    } else {
+      process.env.FORCE_COLOR = originalForceColor;
+    }
     await fs.rm(themeDir, { recursive: true, force: true });
   }
 });

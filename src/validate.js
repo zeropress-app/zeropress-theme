@@ -209,7 +209,7 @@ function groupHumanWarnings(warnings) {
 
 function formatHumanIssue(level, issue, options = {}) {
   const color = options.color || createColor(process.stdout);
-  const lines = [`${formatIssueLevel(level, color)} ${color.bold(issue.code)}`];
+  const lines = [formatIssueHeading(level, issue.code, color)];
   if (Array.isArray(issue.paths) && issue.paths.length > 0) {
     lines.push(`Files: ${issue.paths.join(', ')}`);
   } else {
@@ -261,11 +261,11 @@ function colorStatus(value, level, color) {
   return color.green(value);
 }
 
-function formatIssueLevel(level, color) {
+function formatIssueHeading(level, code, color) {
   if (level === 'error') {
-    return color.red('ERROR');
+    return color.red(`ERROR ${code}`);
   }
-  return color.yellow('WARN ');
+  return color.yellow(`WARN  ${code}`);
 }
 
 function createColor(stream) {
@@ -275,7 +275,6 @@ function createColor(stream) {
     red: (value) => wrap('31', value),
     yellow: (value) => wrap('33', value),
     green: (value) => wrap('32', value),
-    bold: (value) => wrap('1', value),
   };
 }
 
