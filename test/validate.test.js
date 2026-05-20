@@ -51,6 +51,9 @@ function validThemeFiles() {
       license: 'MIT',
       runtime: '0.6',
       description: 'A test theme',
+      features: {
+        search: true,
+      },
     }),
     'layout.html': '<main>{{slot:content}}</main>',
     'index.html': '<h1>{{site.title}}</h1>',

@@ -171,6 +171,7 @@ zeropress-theme dev ./my-theme --data ./preview-data.json --public-dir ./public
 - `--data` must point to a local file path
 - Built-in sample data includes enabled `primary` and `footer` menus for `{{menu:*}}` previews
 - Post templates can render a theme-owned comments island by checking `{{#if post.comments_enabled}}`
+- `theme.json.features` is optional. Omitted feature flags use runtime defaults: `comments: false`, `post_index: true`, `search: false`, and newsletter as capability metadata only.
 - Output behavior follows build-core parity for archive, category, tag, `404`, and special files
 
 ### `validate`
