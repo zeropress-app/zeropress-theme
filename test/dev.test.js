@@ -197,6 +197,40 @@ test('buildDevSnapshot serves canonical v0.6 routes, assets, and special files',
   }
 });
 
+test('resolveSnapshotResponse serves only generated search artifacts under _zeropress', async () => {
+  const files = validThemeFiles();
+  const themeJson = JSON.parse(files['theme.json']);
+  themeJson.features = { search: true };
+  files['theme.json'] = JSON.stringify(themeJson);
+  const themeDir = await createThemeDir(files);
+
+  try {
+    const previewData = defaultPreviewData();
+    previewData.site.search = true;
+
+    const snapshot = await buildDevSnapshot({ themeDir, previewData });
+    const searchJson = resolveSnapshotResponse('/_zeropress/search.json', snapshot);
+    const searchJs = resolveSnapshotResponse('/_zeropress/search.js', snapshot);
+    const searchPagefindJs = resolveSnapshotResponse('/_zeropress/search_pagefind.js', snapshot);
+    const blockedZeropressFile = resolveSnapshotResponse('/_zeropress/not-allowed.json', snapshot);
+    const unknownZeropressFile = resolveSnapshotResponse('/_zeropress/unknown.json', snapshot);
+
+    assert.equal(searchJson.status, 200);
+    assert.equal(searchJson.contentType, 'application/json');
+    assert.match(responseText(searchJson), /Hello ZeroPress/);
+    assert.equal(searchJs.status, 200);
+    assert.equal(searchJs.contentType, 'application/javascript');
+    assert.match(responseText(searchJs), /export async function search/);
+    assert.equal(searchPagefindJs.status, 200);
+    assert.equal(searchPagefindJs.contentType, 'application/javascript');
+    assert.match(responseText(searchPagefindJs), /pagefind\.js/);
+    assert.equal(blockedZeropressFile.status, 404);
+    assert.equal(unknownZeropressFile.status, 404);
+  } finally {
+    await fs.rm(themeDir, { recursive: true, force: true });
+  }
+});
+
 test('buildDevSnapshot renders fallback robots.txt from site.indexing policy', async () => {
   const themeDir = await createThemeDir(validThemeFiles());
 

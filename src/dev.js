@@ -55,6 +55,11 @@ const SPECIAL_FILE_PATHS = new Set([
   '/robots.txt',
   '/sitemap.xml',
 ]);
+const SEARCH_ARTIFACT_PATHS = new Set([
+  '/_zeropress/search.json',
+  '/_zeropress/search.js',
+  '/_zeropress/search_pagefind.js',
+]);
 
 const BUILTIN_404_HTML = '<!doctype html><html><body><h1>404</h1><p>Not Found</p></body></html>';
 
@@ -658,7 +663,11 @@ export function resolveOutputPath(pathname) {
     return 'index.html';
   }
 
-  if (normalized.startsWith('/assets/') || SPECIAL_FILE_PATHS.has(normalized)) {
+  if (
+    normalized.startsWith('/assets/')
+    || SPECIAL_FILE_PATHS.has(normalized)
+    || SEARCH_ARTIFACT_PATHS.has(normalized)
+  ) {
     return normalized.slice(1);
   }
 
