@@ -48,7 +48,7 @@ function printHelp() {
   console.log(`zeropress-theme - ZeroPress theme development toolkit
 
 Usage:
-  zeropress-theme dev <themeDir> [--data <path>] [--public-dir <dir>] [--host <ip>] [--port <n>] [--strict-port] [--open]
+  zeropress-theme dev <themeDir> [--data <path>] [--public-dir <dir>] [--host <ip>] [--port <n>] [--strict-port] [--open] [--no-js]
   zeropress-theme validate <themeDir|theme.zip> [--strict] [--json]
   zeropress-theme pack <themeDir> [--out <dir>] [--name <zipFile>] [--dry-run]
 

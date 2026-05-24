@@ -87,7 +87,7 @@ For Markdown-first sites, use [@zeropress/build-pages](https://www.npmjs.com/pac
 ## Usage
 
 ```bash
-zeropress-theme dev <themeDir> [--data <path>] [--public-dir <dir>] [--host <ip>] [--port <n>] [--strict-port] [--open]
+zeropress-theme dev <themeDir> [--data <path>] [--public-dir <dir>] [--host <ip>] [--port <n>] [--strict-port] [--open] [--no-js]
 zeropress-theme validate <themeDir|theme.zip> [--strict] [--json]
 zeropress-theme pack <themeDir> [--out <dir>] [--name <zipFile>] [--dry-run]
 ```
@@ -119,7 +119,7 @@ Launches a local preview server with WebSocket-based live reload.
 #### Usage
 
 ```bash
-zeropress-theme dev <themeDir> [--data <path>] [--public-dir <dir>] [--host <ip>] [--port <n>] [--strict-port] [--open]
+zeropress-theme dev <themeDir> [--data <path>] [--public-dir <dir>] [--host <ip>] [--port <n>] [--strict-port] [--open] [--no-js]
 ```
 
 #### Arguments
@@ -136,6 +136,7 @@ zeropress-theme dev <themeDir> [--data <path>] [--public-dir <dir>] [--host <ip>
 | `--port <n>` | Preferred server port | `4000` |
 | `--strict-port` | Fail when the preferred port is already in use instead of trying the next port | — |
 | `--open` | Open the browser automatically | — |
+| `--no-js` | Add a dev-only CSP header that disables JavaScript execution in HTML responses | — |
 
 #### Examples
 
@@ -143,6 +144,7 @@ zeropress-theme dev <themeDir> [--data <path>] [--public-dir <dir>] [--host <ip>
 zeropress-theme dev ./my-theme
 zeropress-theme dev ./my-theme --data ./preview-data.json
 zeropress-theme dev ./my-theme --data ./preview-data.json --public-dir ./public
+zeropress-theme dev ./my-theme --data ./preview-data.json --no-js
 ```
 
 #### Notes
@@ -165,6 +167,7 @@ zeropress-theme dev ./my-theme --data ./preview-data.json --public-dir ./public
 - Watches theme directory changes and performs a full rebuild with full reload
 - Watches the `--data` file too when one is provided
 - Watches the public directory too when it exists at startup; creating it after startup requires restarting `dev`
+- `--no-js` adds `Content-Security-Policy: script-src 'none'` to HTML responses and skips live reload injection. It does not rewrite HTML or block `.js` asset requests.
 - Non-matching routes return `404`
 - If `404.html` exists at theme root, it is rendered; otherwise a built-in fallback page is used
 - `dev` only accepts canonical preview-data v0.6

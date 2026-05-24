@@ -69,6 +69,7 @@ export async function runDev(argv) {
   const host = flags.host || '127.0.0.1';
   const port = Number(flags.port || DEFAULT_DEV_PORT);
   const strictPort = flags.strictPort === true;
+  const noJs = flags.noJs === true;
 
   if (!Number.isInteger(port) || port <= 0 || port > 65535) {
     throw new Error(`Invalid port: ${flags.port}`);
@@ -83,7 +84,7 @@ export async function runDev(argv) {
 
   let snapshot = await buildSnapshot();
   const server = http.createServer((req, res) => {
-    handleRequest(req, res, snapshot, publicDir).catch((error) => {
+    handleRequest(req, res, snapshot, publicDir, { noJs }).catch((error) => {
       send(res, 500, 'text/plain; charset=utf-8', `Internal error: ${error.message}`);
     });
   });
@@ -137,6 +138,9 @@ export async function runDev(argv) {
 
   const url = `http://${host}:${actualPort}`;
   console.log(`[dev] running at ${url}`);
+  if (noJs) {
+    console.log('[dev] No-JS preview mode enabled');
+  }
   if (flags.open === true) {
     openBrowser(url);
   }
@@ -195,6 +199,11 @@ function parseDevArgs(argv) {
 
     if (key === 'strict-port') {
       flags.strictPort = true;
+      continue;
+    }
+
+    if (key === 'no-js') {
+      flags.noJs = true;
       continue;
     }
 
@@ -656,20 +665,34 @@ export function resolveOutputPath(pathname) {
   return `${normalized.slice(1)}/index.html`;
 }
 
-export async function handleRequest(req, res, snapshot, publicDir = null) {
+export async function handleRequest(req, res, snapshot, publicDir = null, { noJs = false } = {}) {
   try {
     const url = new URL(req.url, 'http://localhost');
     const response = await resolveDevResponse(url.pathname, snapshot, publicDir);
-    const body = shouldInjectLiveReload(response.contentType)
+    const body = shouldInjectLiveReload(response.contentType, { noJs })
       ? injectLiveReload(response.body)
       : response.body;
-    send(res, response.status, response.contentType, body);
+    send(res, response.status, response.contentType, body, noJsHeaders(response.contentType, { noJs }));
   } catch (error) {
     send(res, 500, 'text/plain; charset=utf-8', `Internal error: ${error.message}`);
   }
 }
 
-function shouldInjectLiveReload(contentType) {
+function shouldInjectLiveReload(contentType, { noJs = false } = {}) {
+  return !noJs && isHtmlContentType(contentType);
+}
+
+function noJsHeaders(contentType, { noJs = false } = {}) {
+  if (!noJs || !isHtmlContentType(contentType)) {
+    return {};
+  }
+
+  return {
+    'content-security-policy': "script-src 'none'",
+  };
+}
+
+function isHtmlContentType(contentType) {
   return typeof contentType === 'string' && contentType.startsWith('text/html');
 }
 
@@ -682,8 +705,8 @@ function injectLiveReload(html) {
   return `${markup}${script}`;
 }
 
-function send(res, status, type, body) {
-  res.writeHead(status, { 'content-type': type });
+function send(res, status, type, body, headers = {}) {
+  res.writeHead(status, { 'content-type': type, ...headers });
   res.end(body);
 }
 

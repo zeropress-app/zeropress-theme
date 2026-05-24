@@ -22,6 +22,7 @@ test('run prints help when --help appears anywhere in argv', async () => {
   assert.match(messages[0], /zeropress-theme - ZeroPress theme development toolkit/);
   assert.match(messages[0], /zeropress-theme dev <themeDir>/);
   assert.match(messages[0], /--public-dir <dir>/);
+  assert.match(messages[0], /--no-js/);
   assert.match(messages[0], /Arguments:/);
   assert.match(messages[0], /Options:/);
   assert.match(messages[0], /--version, -v/);

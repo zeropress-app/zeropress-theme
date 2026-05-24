@@ -643,6 +643,40 @@ test('handleRequest injects live reload into public HTML fallback', async () => 
   }
 });
 
+test('handleRequest no-js mode adds CSP to HTML and skips live reload injection', async () => {
+  const themeDir = await createThemeDir(validThemeFiles());
+  const res = createFakeResponse();
+
+  try {
+    const snapshot = await buildDevSnapshot({ themeDir, previewData: defaultPreviewData() });
+    await handleRequest({ url: '/' }, res, snapshot, null, { noJs: true });
+
+    assert.equal(res.status, 200);
+    assert.equal(res.headers['content-type'], 'text/html');
+    assert.equal(res.headers['content-security-policy'], "script-src 'none'");
+    assert.doesNotMatch(responseText({ body: res.body }), /__zeropress_ws/);
+  } finally {
+    await fs.rm(themeDir, { recursive: true, force: true });
+  }
+});
+
+test('handleRequest no-js mode does not add CSP to non-HTML responses', async () => {
+  const themeDir = await createThemeDir(validThemeFiles());
+  const res = createFakeResponse();
+
+  try {
+    const snapshot = await buildDevSnapshot({ themeDir, previewData: defaultPreviewData() });
+    await handleRequest({ url: '/assets/style.css' }, res, snapshot, null, { noJs: true });
+
+    assert.equal(res.status, 200);
+    assert.equal(res.headers['content-type'], 'text/css');
+    assert.equal(res.headers['content-security-policy'], undefined);
+    assert.match(responseText({ body: res.body }), /body\{color:black\}/);
+  } finally {
+    await fs.rm(themeDir, { recursive: true, force: true });
+  }
+});
+
 test('resolveExistingPublicDir returns a public directory only when it exists as a directory', async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-theme-public-'));
   const publicDir = path.join(tempDir, 'public');
