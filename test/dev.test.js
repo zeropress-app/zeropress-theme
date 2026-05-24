@@ -165,7 +165,8 @@ test('buildDevSnapshot serves canonical v0.6 routes, assets, and special files',
     assert.equal(home.status, 200);
     assert.match(responseText(home), /ZeroPress Preview/);
     assert.match(responseText(home), /Preview excerpt/);
-    assert.match(responseText(home), /<title>ZeroPress Preview<\/title>/);
+    assert.match(responseText(home), /<title>ZeroPress Preview - Default preview data<\/title>/);
+    assert.match(responseText(home), /property="og:title" content="ZeroPress Preview - Default preview data"/);
     assert.match(responseText(home), /property="og:type" content="website"/);
     assert.match(responseText(homePage2), /Archive Patterns/);
     assert.match(responseText(post), /Hello ZeroPress/);
