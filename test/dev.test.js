@@ -8,6 +8,7 @@ import {
   buildDevSnapshot,
   DEFAULT_DEV_PORT,
   defaultPreviewData,
+  formatDevRunningMessage,
   handleRequest,
   listenServerWithFallback,
   normalizeListenError,
@@ -19,6 +20,39 @@ import {
   resolvePublicFileResponse,
   resolveSnapshotResponse,
 } from '../src/dev.js';
+
+function withColorEnv(env, fn) {
+  const previousForceColor = process.env.FORCE_COLOR;
+  const previousNoColor = process.env.NO_COLOR;
+
+  if ('FORCE_COLOR' in env) {
+    process.env.FORCE_COLOR = env.FORCE_COLOR;
+  } else {
+    delete process.env.FORCE_COLOR;
+  }
+
+  if ('NO_COLOR' in env) {
+    process.env.NO_COLOR = env.NO_COLOR;
+  } else {
+    delete process.env.NO_COLOR;
+  }
+
+  try {
+    return fn();
+  } finally {
+    if (previousForceColor === undefined) {
+      delete process.env.FORCE_COLOR;
+    } else {
+      process.env.FORCE_COLOR = previousForceColor;
+    }
+
+    if (previousNoColor === undefined) {
+      delete process.env.NO_COLOR;
+    } else {
+      process.env.NO_COLOR = previousNoColor;
+    }
+  }
+}
 
 function withPublicDirEnv(value, fn) {
   const previousValue = process.env.ZEROPRESS_PUBLIC_DIR;
@@ -130,6 +164,14 @@ function createFakeResponse() {
     },
   };
 }
+
+test('formatDevRunningMessage uses success color when color is enabled', () => {
+  const message = withColorEnv({ FORCE_COLOR: '1' }, () => (
+    formatDevRunningMessage('http://127.0.0.1:4000', { isTTY: false })
+  ));
+
+  assert.equal(message, '\x1b[32m[dev] running at http://127.0.0.1:4000\x1b[0m');
+});
 
 test('defaultPreviewData builds a valid v0.6 dev snapshot', async () => {
   const themeDir = await createThemeDir(validThemeFiles());

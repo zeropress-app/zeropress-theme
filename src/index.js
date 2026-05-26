@@ -41,7 +41,7 @@ export async function run(argv) {
   }
 
   printHelp();
-  throw new Error(`[zeropress-theme] Unknown command: ${command}`);
+  throw new Error(`Unknown command: ${command}`);
 }
 
 function printHelp() {

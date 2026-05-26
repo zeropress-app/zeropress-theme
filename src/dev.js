@@ -5,6 +5,7 @@ import http from 'node:http';
 import { spawn } from 'node:child_process';
 import { WebSocketServer } from 'ws';
 import { buildSiteFromThemeDir, MemoryWriter } from '@zeropress/build-core';
+import { createColor } from './color.js';
 import { getThemeDir } from './helpers.js';
 
 const DEV_BUILD_OPTIONS = {
@@ -142,7 +143,7 @@ export async function runDev(argv) {
   const watchers = await createWatchers(themeDir, extraWatchPaths, extraWatchDirs, triggerRebuild);
 
   const url = `http://${host}:${actualPort}`;
-  console.log(`[dev] running at ${url}`);
+  console.log(formatDevRunningMessage(url));
   if (noJs) {
     console.log('[dev] No-JS preview mode enabled');
   }
@@ -183,6 +184,10 @@ export async function runDev(argv) {
 
   process.once('SIGINT', () => shutdown('SIGINT'));
   process.once('SIGTERM', () => shutdown('SIGTERM'));
+}
+
+export function formatDevRunningMessage(url, stream = process.stdout) {
+  return createColor(stream).green(`[dev] running at ${url}`);
 }
 
 function parseDevArgs(argv) {

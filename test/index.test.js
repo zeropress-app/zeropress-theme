@@ -28,7 +28,7 @@ test('run prints help when --help appears anywhere in argv', async () => {
   assert.match(messages[0], /--version, -v/);
 });
 
-test('run prints help and throws a prefixed error for unknown commands', async () => {
+test('run prints help and throws an error for unknown commands', async () => {
   const messages = [];
   const originalLog = console.log;
   console.log = (message) => {
@@ -38,7 +38,7 @@ test('run prints help and throws a prefixed error for unknown commands', async (
   try {
     await assert.rejects(
       () => run(['hello', '--world']),
-      /\[zeropress-theme\] Unknown command: hello/,
+      /Unknown command: hello/,
     );
   } finally {
     console.log = originalLog;
