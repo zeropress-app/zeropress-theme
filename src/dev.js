@@ -26,6 +26,8 @@ const PUBLIC_FAVICON_FILES = Object.freeze({
   apple_touch_icon: 'apple-touch-icon.png',
 });
 const PUBLIC_SITEMAP_STYLESHEET_FILE = 'sitemap.xsl';
+const DEFAULT_PERMALINK_OUTPUT_STYLE = 'directory';
+const PERMALINK_OUTPUT_STYLES = new Set(['directory', 'html-extension']);
 
 const CONTENT_TYPES = new Map([
   ['.css', 'text/css; charset=utf-8'],
@@ -487,6 +489,7 @@ export async function buildDevSnapshot({ themeDir, previewData, publicDir = null
   return {
     files,
     fallbackNotFoundHtml: BUILTIN_404_HTML,
+    outputStyle: getPreviewOutputStyle(previewData),
   };
 }
 
@@ -530,7 +533,7 @@ export async function resolveDevResponse(pathname, snapshot, publicDir = null) {
 }
 
 function resolveSnapshotFileResponse(pathname, snapshot) {
-  const outputPath = resolveOutputPath(pathname);
+  const outputPath = resolveOutputPath(pathname, snapshot.outputStyle);
   const file = snapshot.files.get(outputPath);
   if (!file) {
     return null;
@@ -661,7 +664,7 @@ export async function discoverPublicSitemapStylesheet(publicDir) {
   return stat.isFile() ? `/${PUBLIC_SITEMAP_STYLESHEET_FILE}` : undefined;
 }
 
-export function resolveOutputPath(pathname) {
+export function resolveOutputPath(pathname, outputStyle = DEFAULT_PERMALINK_OUTPUT_STYLE) {
   const normalized = normalizeRequestPath(pathname);
 
   if (normalized === '/') {
@@ -674,6 +677,10 @@ export function resolveOutputPath(pathname) {
     || SEARCH_ARTIFACT_PATHS.has(normalized)
   ) {
     return normalized.slice(1);
+  }
+
+  if (outputStyle === 'html-extension') {
+    return `${normalized.slice(1)}.html`;
   }
 
   return `${normalized.slice(1)}/index.html`;
@@ -728,6 +735,11 @@ function normalizeRequestPath(value) {
   const stringValue = safeDecodePath(String(value || '/'));
   const withoutTrailingSlash = stringValue.replace(/\/+$/, '');
   return withoutTrailingSlash || '/';
+}
+
+function getPreviewOutputStyle(previewData) {
+  const outputStyle = previewData?.site?.permalinks?.output_style;
+  return PERMALINK_OUTPUT_STYLES.has(outputStyle) ? outputStyle : DEFAULT_PERMALINK_OUTPUT_STYLE;
 }
 
 function normalizeOutputPath(filePath) {

@@ -396,6 +396,26 @@ test('resolveSnapshotResponse returns custom 404 or built-in fallback for missin
   }
 });
 
+test('resolveSnapshotResponse honors html-extension output style for clean URLs', async () => {
+  const themeDir = await createThemeDir(validThemeFiles());
+  const previewData = defaultPreviewData();
+  previewData.site.permalinks = {
+    output_style: 'html-extension',
+  };
+
+  try {
+    const snapshot = await buildDevSnapshot({ themeDir, previewData });
+    const cleanUrl = resolveSnapshotResponse('/about', snapshot);
+    const extensionUrl = resolveSnapshotResponse('/about.html', snapshot);
+
+    assert.equal(cleanUrl.status, 200);
+    assert.match(responseText(cleanUrl), /About page/);
+    assert.equal(extensionUrl.status, 404);
+  } finally {
+    await fs.rm(themeDir, { recursive: true, force: true });
+  }
+});
+
 test('resolveDevResponse serves generated output before public files', async () => {
   const themeDir = await createThemeDir(validThemeFiles());
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-theme-public-'));
