@@ -11,7 +11,6 @@ export async function runValidate(argv) {
     throw new Error('validate requires a themeDir or theme.zip argument');
   }
   const targetPath = getThemeDir(positional[0]);
-  const strict = flags.strict === true;
   const json = flags.json === true;
   const target = await resolveValidationTarget(targetPath);
   const result = target.type === 'zip'
@@ -21,30 +20,23 @@ export async function runValidate(argv) {
   if (json) {
     process.stdout.write(`${JSON.stringify(toJsonOutput(result), null, 2)}\n`);
   } else {
-    printHuman(result, target, { strict });
+    printHuman(result, target);
   }
 
   if (result.errors.length > 0) {
     return 1;
-  }
-  if (result.warnings.length > 0) {
-    return strict ? 1 : 0;
   }
   return 0;
 }
 
 function parseValidateArgs(argv) {
   const positional = [];
-  const flags = { strict: false, json: false };
+  const flags = { json: false };
 
   for (let i = 0; i < argv.length; i += 1) {
     const token = argv[i];
     if (!token.startsWith('--')) {
       positional.push(token);
-      continue;
-    }
-    if (token === '--strict') {
-      flags.strict = true;
       continue;
     }
     if (token === '--json') {
@@ -92,6 +84,7 @@ export async function validateZipFile(zipPath) {
       ok: false,
       errors: [createIssue('INVALID_ZIP_ROOT', 'theme.zip', analysis.error, 'error')],
       warnings: [],
+      infos: [],
       manifest: undefined,
       checkedFiles: analysis.checkedFiles,
     };
@@ -117,6 +110,7 @@ export async function validateZipFile(zipPath) {
     warnings: analysis.ignoredMacOsMetadata
       ? [createIssue('MACOS_METADATA_IGNORED', 'theme.zip', 'macOS metadata files (__MACOSX, ._*) were ignored', 'warning'), ...result.warnings]
       : result.warnings,
+    infos: result.infos || [],
   };
 }
 
@@ -131,17 +125,19 @@ async function resolveValidationTarget(inputPath) {
   throw new Error(`Validate expects a theme directory or .zip file: ${inputPath}`);
 }
 
-function printHuman(result, target, options = {}) {
+function printHuman(result, target) {
   const label = target.type === 'zip' ? 'theme zip' : 'theme directory';
   const color = createColor(process.stdout);
-  const warnings = groupHumanWarnings(result.warnings);
+  const warnings = result.warnings || [];
+  const infos = groupHumanInfos(result.infos || []);
   const blocks = [];
-  const status = validationStatus(result, options);
+  const status = validationStatus(result);
   blocks.push([
     colorStatus(status.title, status.level, color),
     `Target: ${label}: ${target.path}`,
     `Errors: ${result.errors.length}`,
     `Warnings: ${result.warnings.length}`,
+    `Info: ${(result.infos || []).length}`,
     `Checked files: ${result.checkedFiles}`,
   ].join('\n'));
 
@@ -151,12 +147,15 @@ function printHuman(result, target, options = {}) {
   for (const warning of warnings) {
     blocks.push(formatHumanIssue('warning', warning, { color }));
   }
+  for (const info of infos) {
+    blocks.push(formatHumanIssue('info', info, { color }));
+  }
 
   blocks.push(colorStatus(status.result, status.level, color));
   console.log(blocks.join('\n\n'));
 }
 
-function validationStatus(result, options) {
+function validationStatus(result) {
   if (result.errors.length > 0) {
     return {
       level: 'error',
@@ -165,19 +164,22 @@ function validationStatus(result, options) {
     };
   }
 
-  if (result.warnings.length > 0 && options.strict) {
-    return {
-      level: 'error',
-      title: 'Theme validation failed',
-      result: `Result: failed because --strict treats ${result.warnings.length} warning(s) as failures.`,
-    };
-  }
-
   if (result.warnings.length > 0) {
+    const infoSuffix = (result.infos || []).length > 0
+      ? ` and ${(result.infos || []).length} info note(s)`
+      : '';
     return {
       level: 'warning',
       title: 'Theme validation passed with warnings',
-      result: `Result: passed with ${result.warnings.length} warning(s).`,
+      result: `Result: passed with ${result.warnings.length} warning(s)${infoSuffix}.`,
+    };
+  }
+
+  if ((result.infos || []).length > 0) {
+    return {
+      level: 'success',
+      title: 'Theme validation passed',
+      result: `Result: passed with ${(result.infos || []).length} info note(s).`,
     };
   }
 
@@ -188,20 +190,20 @@ function validationStatus(result, options) {
   };
 }
 
-function groupHumanWarnings(warnings) {
-  const optionalTemplateWarnings = warnings.filter((warning) => warning.code === 'MISSING_OPTIONAL_TEMPLATE');
-  const otherWarnings = warnings.filter((warning) => warning.code !== 'MISSING_OPTIONAL_TEMPLATE');
+function groupHumanInfos(infos) {
+  const optionalTemplateInfos = infos.filter((info) => info.code === 'MISSING_OPTIONAL_TEMPLATE');
+  const otherInfos = infos.filter((info) => info.code !== 'MISSING_OPTIONAL_TEMPLATE');
 
-  if (optionalTemplateWarnings.length === 0) {
-    return otherWarnings;
+  if (optionalTemplateInfos.length === 0) {
+    return otherInfos;
   }
 
   return [
-    ...otherWarnings,
+    ...otherInfos,
     {
       code: 'MISSING_OPTIONAL_TEMPLATES',
-      severity: 'warning',
-      paths: optionalTemplateWarnings.map((warning) => warning.path),
+      severity: 'info',
+      paths: optionalTemplateInfos.map((info) => info.path),
       message: 'Optional route templates are missing.',
       hint: 'This does not block validation. Add these files only if the theme wants archive, category, or tag pages.',
     },
@@ -259,12 +261,18 @@ function colorStatus(value, level, color) {
   if (level === 'warning') {
     return color.yellow(value);
   }
+  if (level === 'info') {
+    return color.blue(value);
+  }
   return color.green(value);
 }
 
 function formatIssueHeading(level, code, color) {
   if (level === 'error') {
     return color.red(`ERROR ${code}`);
+  }
+  if (level === 'info') {
+    return color.blue(`INFO  ${code}`);
   }
   return color.yellow(`WARN  ${code}`);
 }
@@ -275,10 +283,12 @@ function toJsonOutput(result) {
     summary: {
       errors: result.errors.length,
       warnings: result.warnings.length,
+      infos: (result.infos || []).length,
       checkedFiles: result.checkedFiles,
     },
     errors: result.errors,
     warnings: result.warnings,
+    infos: result.infos || [],
     meta: {
       schemaVersion: '1',
       tool: 'zeropress-theme',

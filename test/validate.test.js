@@ -73,7 +73,7 @@ test('validateThemeDirectory returns zero errors for a valid theme', async () =>
   await fs.rm(themeDir, { recursive: true, force: true });
 });
 
-test('runValidate returns 1 and emits json for invalid theme in strict json mode', async () => {
+test('runValidate returns 1 and emits json for invalid theme', async () => {
   const files = validThemeFiles();
   delete files['layout.html'];
   const themeDir = await createThemeDir(files);
@@ -92,11 +92,12 @@ test('runValidate returns 1 and emits json for invalid theme in strict json mode
   });
 
   try {
-    const code = await runValidate([themeDir, '--json', '--strict']);
+    const code = await runValidate([themeDir, '--json']);
     assert.equal(code, 1);
     const payload = JSON.parse(chunks.join(''));
     assert.equal(payload.ok, false);
     assert.equal(Array.isArray(payload.errors), true);
+    assert.equal(Array.isArray(payload.infos), true);
     assert.equal(payload.errors.some((issue) => issue.path === 'layout.html'), true);
   } finally {
     process.stdout.write = originalWrite;
@@ -161,7 +162,7 @@ test('runValidate keeps forced-color human output searchable after ANSI strippin
     const output = logs.join('\n');
     assert.match(output, /\x1B\[/);
     assert.match(stripAnsi(output), /ERROR LAYOUT_SCRIPT_NOT_ALLOWED/);
-    assert.match(stripAnsi(output), /WARN  MISSING_OPTIONAL_TEMPLATES/);
+    assert.match(stripAnsi(output), /INFO  MISSING_OPTIONAL_TEMPLATES/);
   } finally {
     console.log = originalLog;
     if (originalNoColor === undefined) {
@@ -242,12 +243,15 @@ test('runValidate accepts a zip file with macOS metadata', async () => {
   }
 });
 
-test('runValidate treats warnings as failures only in strict mode', async () => {
+test('runValidate ignores info notes for exit code and rejects removed strict option', async () => {
   const themeDir = await createThemeDir(validThemeFiles());
 
   try {
     assert.equal(await runValidate([themeDir]), 0);
-    assert.equal(await runValidate([themeDir, '--strict']), 1);
+    await assert.rejects(
+      () => runValidate([themeDir, '--strict']),
+      /Unknown option for validate: --strict/,
+    );
   } finally {
     await fs.rm(themeDir, { recursive: true, force: true });
   }

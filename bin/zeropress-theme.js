@@ -15,6 +15,7 @@ function colorizeError(message) {
     .replace(/^(\[zeropress-theme\].*)/m, '\x1b[31m$1\x1b[0m')
     .replace(/\bERROR\b/g, '\x1b[31mERROR\x1b[0m')
     .replace(/\bWARN\b/g, '\x1b[33mWARN\x1b[0m')
+    .replace(/\bINFO\b/g, '\x1b[34mINFO\x1b[0m')
     .replace(/\bHint:/g, '\x1b[1mHint:\x1b[0m');
 }
 

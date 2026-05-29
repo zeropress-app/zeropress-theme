@@ -4,6 +4,7 @@ export function createColor(stream) {
   return {
     red: (value) => wrap('31', value),
     yellow: (value) => wrap('33', value),
+    blue: (value) => wrap('34', value),
     green: (value) => wrap('32', value),
   };
 }

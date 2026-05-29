@@ -49,7 +49,7 @@ function printHelp() {
 
 Usage:
   zeropress-theme dev <themeDir> [--data <path>] [--public-dir <dir>] [--host <ip>] [--port <n>] [--strict-port] [--open] [--no-js]
-  zeropress-theme validate <themeDir|theme.zip> [--strict] [--json]
+  zeropress-theme validate <themeDir|theme.zip> [--json]
   zeropress-theme pack <themeDir> [--out <dir>] [--name <zipFile>] [--dry-run]
 
 Arguments:

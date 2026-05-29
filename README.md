@@ -88,7 +88,7 @@ For Markdown-first sites, use [@zeropress/build-pages](https://www.npmjs.com/pac
 
 ```bash
 zeropress-theme dev <themeDir> [--data <path>] [--public-dir <dir>] [--host <ip>] [--port <n>] [--strict-port] [--open] [--no-js]
-zeropress-theme validate <themeDir|theme.zip> [--strict] [--json]
+zeropress-theme validate <themeDir|theme.zip> [--json]
 zeropress-theme pack <themeDir> [--out <dir>] [--name <zipFile>] [--dry-run]
 ```
 
@@ -106,7 +106,7 @@ zeropress-theme pack <themeDir> [--out <dir>] [--name <zipFile>] [--dry-run]
 
 ```bash
 zeropress-theme dev ./my-theme --data ./preview-data.json
-zeropress-theme validate ./my-theme --strict
+zeropress-theme validate ./my-theme
 zeropress-theme pack ./my-theme --out ./artifacts
 ```
 
@@ -184,7 +184,7 @@ Validates a theme directory or packaged zip against Theme Runtime v0.6.
 #### Usage
 
 ```bash
-zeropress-theme validate <themeDir|theme.zip> [--strict] [--json]
+zeropress-theme validate <themeDir|theme.zip> [--json]
 ```
 
 #### Arguments
@@ -195,14 +195,13 @@ zeropress-theme validate <themeDir|theme.zip> [--strict] [--json]
 
 | Option | Description |
 | --- | --- |
-| `--strict` | Treat warnings as errors |
 | `--json` | Output results as JSON |
 
 #### Examples
 
 ```bash
 zeropress-theme validate ./my-theme
-zeropress-theme validate ./dist/my-theme-1.0.0.zip --strict
+zeropress-theme validate ./dist/my-theme-1.0.0.zip
 ```
 
 #### Errors
@@ -219,17 +218,19 @@ zeropress-theme validate ./dist/my-theme-1.0.0.zip --strict
 
 #### Warnings
 
-- `archive.html`, `category.html`, `tag.html` missing
+- `layout.html` does not start with `<!doctype html>`
 - macOS metadata files such as `__MACOSX/` and `._*` are ignored
+
+#### Info
+
+- `archive.html`, `category.html`, `tag.html` missing
 
 #### Exit Codes
 
 | Code | Meaning |
 | --- | --- |
-| `0` | Valid theme, with or without warnings |
+| `0` | Valid theme, with or without warnings or info notes |
 | `1` | Errors found |
-
-With `--strict`, warnings also return exit code `1`.
 
 ### `pack`
 
@@ -271,8 +272,8 @@ zeropress-theme pack ./my-theme --out ./artifacts
 ## CI Usage
 
 ```bash
-zeropress-theme validate ./theme --strict
-zeropress-theme validate ./artifacts/theme-1.0.0.zip --strict
+zeropress-theme validate ./theme
+zeropress-theme validate ./artifacts/theme-1.0.0.zip
 zeropress-theme pack ./theme --dry-run
 zeropress-theme pack ./theme --out ./artifacts
 ```
