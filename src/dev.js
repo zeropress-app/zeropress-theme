@@ -533,17 +533,19 @@ export async function resolveDevResponse(pathname, snapshot, publicDir = null) {
 }
 
 function resolveSnapshotFileResponse(pathname, snapshot) {
-  const outputPath = resolveOutputPath(pathname, snapshot.outputStyle);
-  const file = snapshot.files.get(outputPath);
-  if (!file) {
-    return null;
+  const outputPaths = resolveOutputPathCandidates(pathname, snapshot.outputStyle);
+  for (const outputPath of outputPaths) {
+    const file = snapshot.files.get(outputPath);
+    if (file) {
+      return {
+        status: 200,
+        contentType: file.contentType,
+        body: file.content,
+      };
+    }
   }
 
-  return {
-    status: 200,
-    contentType: file.contentType,
-    body: file.content,
-  };
+  return null;
 }
 
 function resolveNotFoundResponse(snapshot) {
@@ -568,39 +570,40 @@ export async function resolvePublicFileResponse(pathname, publicDir = null) {
     return null;
   }
 
-  const outputPath = resolvePublicOutputPath(pathname);
-  if (!outputPath) {
-    return null;
-  }
+  const outputPaths = resolvePublicOutputPathCandidates(pathname);
 
-  if (outputPath.split('/').some((segment) => shouldIgnorePublicEntry(segment))) {
-    return null;
-  }
-
-  const fullPath = resolvePublicFilePath(publicDir, outputPath);
-  if (!fullPath) {
-    return null;
-  }
-
-  let stat;
-  try {
-    stat = await fs.lstat(fullPath);
-  } catch (error) {
-    if (error && error.code === 'ENOENT') {
-      return null;
+  for (const outputPath of outputPaths) {
+    if (outputPath.split('/').some((segment) => shouldIgnorePublicEntry(segment))) {
+      continue;
     }
-    throw error;
+
+    const fullPath = resolvePublicFilePath(publicDir, outputPath);
+    if (!fullPath) {
+      continue;
+    }
+
+    let stat;
+    try {
+      stat = await fs.lstat(fullPath);
+    } catch (error) {
+      if (error && error.code === 'ENOENT') {
+        continue;
+      }
+      throw error;
+    }
+
+    if (!stat.isFile()) {
+      continue;
+    }
+
+    return {
+      status: 200,
+      contentType: getContentType(fullPath),
+      body: await fs.readFile(fullPath),
+    };
   }
 
-  if (!stat.isFile()) {
-    return null;
-  }
-
-  return {
-    status: 200,
-    contentType: getContentType(fullPath),
-    body: await fs.readFile(fullPath),
-  };
+  return null;
 }
 
 async function publicRobotsTxtExists(publicDir) {
@@ -665,10 +668,14 @@ export async function discoverPublicSitemapStylesheet(publicDir) {
 }
 
 export function resolveOutputPath(pathname, outputStyle = DEFAULT_PERMALINK_OUTPUT_STYLE) {
+  return resolveOutputPathCandidates(pathname, outputStyle)[0] || '';
+}
+
+function resolveOutputPathCandidates(pathname, outputStyle = DEFAULT_PERMALINK_OUTPUT_STYLE) {
   const normalized = normalizeRequestPath(pathname);
 
   if (normalized === '/') {
-    return 'index.html';
+    return ['index.html'];
   }
 
   if (
@@ -676,14 +683,22 @@ export function resolveOutputPath(pathname, outputStyle = DEFAULT_PERMALINK_OUTP
     || SPECIAL_FILE_PATHS.has(normalized)
     || SEARCH_ARTIFACT_PATHS.has(normalized)
   ) {
-    return normalized.slice(1);
+    return [normalized.slice(1)];
+  }
+
+  if (normalized.endsWith('.html')) {
+    return [normalized.slice(1)];
+  }
+
+  if (normalized.endsWith('/')) {
+    return [`${normalized.slice(1)}index.html`];
   }
 
   if (outputStyle === 'html-extension') {
-    return `${normalized.slice(1)}.html`;
+    return [`${normalized.slice(1)}.html`];
   }
 
-  return `${normalized.slice(1)}/index.html`;
+  return [`${normalized.slice(1)}/index.html`];
 }
 
 export async function handleRequest(req, res, snapshot, publicDir = null, { noJs = false } = {}) {
@@ -733,8 +748,8 @@ function send(res, status, type, body, headers = {}) {
 
 function normalizeRequestPath(value) {
   const stringValue = safeDecodePath(String(value || '/'));
-  const withoutTrailingSlash = stringValue.replace(/\/+$/, '');
-  return withoutTrailingSlash || '/';
+  const withLeadingSlash = stringValue.startsWith('/') ? stringValue : `/${stringValue}`;
+  return withLeadingSlash || '/';
 }
 
 function getPreviewOutputStyle(previewData) {
@@ -747,12 +762,20 @@ function normalizeOutputPath(filePath) {
 }
 
 function resolvePublicOutputPath(pathname) {
+  return resolvePublicOutputPathCandidates(pathname)[0] || null;
+}
+
+function resolvePublicOutputPathCandidates(pathname) {
   const normalized = normalizeRequestPath(pathname);
   if (normalized === '/') {
-    return null;
+    return [];
   }
 
-  return normalizeOutputPath(normalized);
+  if (normalized.endsWith('/')) {
+    return [normalizeOutputPath(`${normalized}index.html`)];
+  }
+
+  return [normalizeOutputPath(normalized)];
 }
 
 function resolvePublicFilePath(publicDir, outputPath) {

@@ -402,15 +402,55 @@ test('resolveSnapshotResponse honors html-extension output style for clean URLs'
   previewData.site.permalinks = {
     output_style: 'html-extension',
   };
+  previewData.content.pages.push({
+    title: 'Deployment',
+    slug: 'deployment',
+    path: 'deployment/index',
+    content: '<p>Deployment page</p>',
+    document_type: 'html',
+    status: 'published',
+  });
 
   try {
     const snapshot = await buildDevSnapshot({ themeDir, previewData });
     const cleanUrl = resolveSnapshotResponse('/about', snapshot);
     const extensionUrl = resolveSnapshotResponse('/about.html', snapshot);
+    const deploymentSlash = resolveSnapshotResponse('/deployment/', snapshot);
+    const deploymentClean = resolveSnapshotResponse('/deployment', snapshot);
+    const deploymentIndex = resolveSnapshotResponse('/deployment/index', snapshot);
+    const deploymentIndexHtml = resolveSnapshotResponse('/deployment/index.html', snapshot);
 
     assert.equal(cleanUrl.status, 200);
     assert.match(responseText(cleanUrl), /About page/);
-    assert.equal(extensionUrl.status, 404);
+    assert.equal(extensionUrl.status, 200);
+    assert.match(responseText(extensionUrl), /About page/);
+    assert.equal(deploymentSlash.status, 200);
+    assert.match(responseText(deploymentSlash), /Deployment page/);
+    assert.equal(deploymentClean.status, 404);
+    assert.equal(deploymentIndex.status, 200);
+    assert.match(responseText(deploymentIndex), /Deployment page/);
+    assert.equal(deploymentIndexHtml.status, 200);
+    assert.match(responseText(deploymentIndexHtml), /Deployment page/);
+  } finally {
+    await fs.rm(themeDir, { recursive: true, force: true });
+  }
+});
+
+test('resolveSnapshotResponse serves directory index requests for directory output style', async () => {
+  const themeDir = await createThemeDir(validThemeFiles());
+
+  try {
+    const snapshot = await buildDevSnapshot({ themeDir, previewData: defaultPreviewData() });
+    const cleanUrl = resolveSnapshotResponse('/about', snapshot);
+    const slashUrl = resolveSnapshotResponse('/about/', snapshot);
+    const indexHtmlUrl = resolveSnapshotResponse('/about/index.html', snapshot);
+
+    assert.equal(cleanUrl.status, 200);
+    assert.match(responseText(cleanUrl), /About page/);
+    assert.equal(slashUrl.status, 200);
+    assert.match(responseText(slashUrl), /About page/);
+    assert.equal(indexHtmlUrl.status, 200);
+    assert.match(responseText(indexHtmlUrl), /About page/);
   } finally {
     await fs.rm(themeDir, { recursive: true, force: true });
   }
@@ -448,11 +488,13 @@ test('resolveDevResponse serves exact public files as fallback', async () => {
     await fs.writeFile(path.join(publicDir, 'favicon.ico'), 'icon', 'utf8');
     await fs.writeFile(path.join(publicDir, 'vendor', 'app.js'), 'console.log("public")', 'utf8');
     await fs.writeFile(path.join(publicDir, 'docs', 'foo.md'), '# Foo', 'utf8');
+    await fs.writeFile(path.join(publicDir, 'docs', 'index.html'), '<h1>Docs index</h1>', 'utf8');
 
     const snapshot = await buildDevSnapshot({ themeDir, previewData: defaultPreviewData() });
     const favicon = await resolveDevResponse('/favicon.ico', snapshot, publicDir);
     const script = await resolveDevResponse('/vendor/app.js', snapshot, publicDir);
     const markdown = await resolveDevResponse('/docs/foo.md', snapshot, publicDir);
+    const directoryIndex = await resolveDevResponse('/docs/', snapshot, publicDir);
     const missing = await resolveDevResponse('/missing.txt', snapshot, publicDir);
 
     assert.equal(favicon.status, 200);
@@ -462,6 +504,9 @@ test('resolveDevResponse serves exact public files as fallback', async () => {
     assert.equal(responseText(script), 'console.log("public")');
     assert.equal(markdown.contentType, 'text/markdown; charset=utf-8');
     assert.equal(responseText(markdown), '# Foo');
+    assert.equal(directoryIndex.status, 200);
+    assert.equal(directoryIndex.contentType, 'text/html; charset=utf-8');
+    assert.equal(responseText(directoryIndex), '<h1>Docs index</h1>');
     assert.equal(missing.status, 404);
   } finally {
     await fs.rm(themeDir, { recursive: true, force: true });
