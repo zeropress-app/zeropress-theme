@@ -1,6 +1,6 @@
 {
   "name": "@zeropress/theme",
-  "version": "0.6.5",
+  "version": "0.6.6",
   "description": "ZeroPress theme developer toolkit",
   "type": "module",
   "license": "MIT",
@@ -36,7 +36,7 @@
     "test": "node --test"
   },
   "dependencies": {
-    "@zeropress/build-core": "0.6.5",
+    "@zeropress/build-core": "0.6.6",
     "@zeropress/theme-validator": "0.6.5",
     "jszip": "3.10.1",
     "ws": "8.20.1"
