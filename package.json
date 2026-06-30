@@ -36,7 +36,7 @@
     "test": "node --test"
   },
   "dependencies": {
-    "@zeropress/build-core": "0.6.12",
+    "@zeropress/build-core": "0.6.13",
     "@zeropress/theme-validator": "0.6.5",
     "jszip": "3.10.1",
     "ws": "8.21.0"
