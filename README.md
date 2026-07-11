@@ -4,7 +4,7 @@
 ![license](https://img.shields.io/npm/l/%40zeropress%2Ftheme)
 ![node](https://img.shields.io/node/v/%40zeropress%2Ftheme)
 
-Public ZeroPress theme developer toolkit for Theme Runtime v0.6.
+Public ZeroPress theme developer toolkit for Theme Runtime v0.7.
 
 This package provides the CLI for previewing, validating, and packaging ZeroPress themes.
 
@@ -15,10 +15,10 @@ It uses directly:
 
 Public contract references:
 
-- [Theme Runtime v0.6 Spec](https://zeropress.dev/spec/theme-runtime-v0.6.html)
-- [Theme Runtime v0.6 Schema](https://schemas.zeropress.dev/theme-runtime/v0.6/schema.json)
-- [Preview Data v0.6 Spec](https://zeropress.dev/spec/preview-data-v0.6.html)
-- [Preview Data v0.6 Schema](https://schemas.zeropress.dev/preview-data/v0.6/schema.json)
+- [Theme Runtime v0.7 Spec](https://zeropress.dev/reference/theme-runtime/specs/v0.7/)
+- [Theme Runtime v0.7 Schema](https://schemas.zeropress.dev/theme-runtime/v0.7/schema.json)
+- [Preview Data v0.7 Spec](https://zeropress.dev/reference/preview-data/specs/v0.7/)
+- [Preview Data v0.7 Schema](https://schemas.zeropress.dev/preview-data/v0.7/schema.json)
 
 ## Install
 
@@ -130,7 +130,7 @@ zeropress-theme dev <themeDir> [--data <path>] [--public-dir <dir>] [--host <ip>
 
 | Option | Description | Default |
 | --- | --- | --- |
-| `--data <path>` | Local preview-data v0.6 JSON file | Built-in sample data |
+| `--data <path>` | Local preview-data v0.7 JSON file | Built-in sample data |
 | `--public-dir <dir>` | Public passthrough directory | `./public` |
 | `--host <ip>` | Bind address | `127.0.0.1` |
 | `--port <n>` | Preferred server port | `4000` |
@@ -159,7 +159,7 @@ zeropress-theme dev ./my-theme --data ./preview-data.json --no-js
 - Generated output is served before public files when paths overlap
 - `robots.txt` is a fallback special file: if public `robots.txt` exists, the dev server serves that file instead of generated fallback robots output
 - Public `robots.txt` is served as-is. If it needs a `Sitemap` directive, add it to the file manually.
-- Root-level public favicon files named `favicon.ico`, `favicon.svg`, `favicon.png`, and `apple-touch-icon.png` are auto-discovered and injected into generated HTML `<head>` output unless preview-data already defines `site.favicon`
+- Root-level public favicon files named `favicon.ico`, `favicon.dark.ico`, `favicon.svg`, `favicon.png`, and `apple-touch-icon.png` are auto-discovered and injected into generated HTML `<head>` output unless preview-data already defines `site.favicon`. When both ICO files exist, `favicon.dark.ico` is used for the dark color scheme and the regular icon variants are used for the light color scheme; a lone ICO file is used for every color scheme
 - A root-level public `sitemap.xsl` is served as-is. When ZeroPress generates `sitemap.xml`, it auto-discovers that file and adds an XML stylesheet processing instruction for `/sitemap.xsl`.
 - Hidden entries, `node_modules`, `Thumbs.db`, `*.key`, `*.pem`, and symlinks inside the public directory are ignored
 - The theme directory must not overlap with the resolved public directory
@@ -170,16 +170,17 @@ zeropress-theme dev ./my-theme --data ./preview-data.json --no-js
 - `--no-js` adds `Content-Security-Policy: script-src 'none'` to HTML responses and skips live reload injection. It does not rewrite HTML or block `.js` asset requests.
 - Non-matching routes return `404`
 - If `404.html` exists at theme root, it is rendered; otherwise a built-in fallback page is used
-- `dev` only accepts canonical preview-data v0.6
+- `dev` only accepts canonical preview-data v0.7
 - `--data` must point to a local file path
 - Built-in sample data includes enabled `primary` and `footer` menus for `{{menu:*}}` previews
-- Post templates can render a theme-owned comments island by checking `{{#if post.comments_enabled}}`
+- Every rendered theme route receives effective `site.search`, `site.feed`, `site.archive`, and `site.comments` objects. Check their `.enabled` discriminator before using feature-specific fields such as `site.feed.url` or `site.archive.url`.
+- Post and Page templates can render a theme-owned comments island by checking `{{#if comments.enabled}}`. Active detail routes also expose `comments.target_type`, `comments.target_public_id`, `comments.provider`, `comments.api_base_url`, pagination/threading settings, and a ZeroPress-only `comments.request_token`; all other routes receive `{ "comments": { "enabled": false } }`.
 - `theme.json.features` is optional. Omitted feature flags use runtime defaults: `comments: false`, `post_index: true`, `search: false`, and newsletter as capability metadata only.
 - Output behavior follows build-core parity for archive, category, tag, `404`, and special files
 
 ### `validate`
 
-Validates a theme directory or packaged zip against Theme Runtime v0.6.
+Validates a theme directory or packaged zip against Theme Runtime v0.7.
 
 #### Usage
 

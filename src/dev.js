@@ -10,17 +10,15 @@ import { getThemeDir } from './helpers.js';
 
 const DEV_BUILD_OPTIONS = {
   assetHashing: false,
-  generateSpecialFiles: true,
-  injectHtmx: false,
-  writeManifest: false,
 };
 
 export const DEFAULT_DEV_PORT = 4000;
-const PREVIEW_DATA_VERSION = '0.6';
+const PREVIEW_DATA_VERSION = '0.7';
 const DEFAULT_PUBLIC_DIR_NAME = 'public';
 const PUBLIC_DIR_ENV_NAME = 'ZEROPRESS_PUBLIC_DIR';
 const PUBLIC_FAVICON_FILES = Object.freeze({
   icon: 'favicon.ico',
+  icon_dark: 'favicon.dark.ico',
   svg: 'favicon.svg',
   png: 'favicon.png',
   apple_touch_icon: 'apple-touch-icon.png',
@@ -326,14 +324,12 @@ export function defaultPreviewData() {
       title: 'ZeroPress Preview',
       description: 'Default preview data',
       url: 'https://example.com',
-      media_base_url: 'https://media.example.com',
+      media_origin: 'https://media.example.com',
       locale: 'en-US',
       posts_per_page: 2,
-      datetime_display: 'static',
       date_style: 'medium',
       time_style: 'none',
       timezone: 'UTC',
-      disallow_comments: false,
     },
     content: {
       authors: [
@@ -345,7 +341,6 @@ export function defaultPreviewData() {
       ],
       posts: [
         {
-          id: 'post-1',
           public_id: 101,
           title: 'Hello ZeroPress',
           slug: 'hello-zeropress',
@@ -362,7 +357,6 @@ export function defaultPreviewData() {
           tag_slugs: ['intro'],
         },
         {
-          id: 'post-2',
           public_id: 102,
           title: 'Theme Blocks Deep Dive',
           slug: 'theme-blocks-deep-dive',
@@ -378,7 +372,6 @@ export function defaultPreviewData() {
           tag_slugs: ['intro'],
         },
         {
-          id: 'post-3',
           public_id: 103,
           title: 'Archive Patterns',
           slug: 'archive-patterns',
@@ -415,14 +408,12 @@ export function defaultPreviewData() {
           {
             title: 'Home',
             url: '/',
-            type: 'custom',
             target: '_self',
             children: [],
           },
           {
             title: 'Archive',
             url: '/archive/',
-            type: 'custom',
             target: '_self',
             children: [],
           },
@@ -434,21 +425,18 @@ export function defaultPreviewData() {
           {
             title: 'Archive',
             url: '/archive/',
-            type: 'custom',
             target: '_self',
             children: [],
           },
           {
             title: 'RSS',
             url: '/feed.xml',
-            type: 'custom',
             target: '_self',
             children: [],
           },
           {
             title: 'Sitemap',
             url: '/sitemap.xml',
-            type: 'custom',
             target: '_self',
             children: [],
           },

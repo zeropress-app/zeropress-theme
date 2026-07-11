@@ -61,7 +61,7 @@ Options:
   --version, -v         Show version
 
 Notes:
-  - dev expects canonical preview-data v0.6 JSON
-  - validate checks the ZeroPress Theme Runtime v0.6 contract
+  - dev expects canonical preview-data v0.7 JSON
+  - validate checks the ZeroPress Theme Runtime v0.7 contract
   - pack validates before packaging and re-validates the generated zip`);
 }

@@ -93,7 +93,7 @@ function validThemeFiles() {
       slug: 'dev-theme',
       version: '1.0.0',
       license: 'MIT',
-      runtime: '0.6',
+      runtime: '0.7',
       description: 'A test theme',
     }),
     'layout.html': '<html><head><title>{{meta.title}}</title>{{meta.head_tags}}</head><body>{{slot:header}}<main>{{slot:content}}</main>{{slot:footer}}</body></html>',
@@ -173,19 +173,23 @@ test('formatDevRunningMessage uses success color when color is enabled', () => {
   assert.equal(message, '\x1b[32m[dev] running at http://127.0.0.1:4000\x1b[0m');
 });
 
-test('defaultPreviewData builds a valid v0.6 dev snapshot', async () => {
+test('defaultPreviewData builds a valid v0.7 dev snapshot', async () => {
   const themeDir = await createThemeDir(validThemeFiles());
+  const previewData = defaultPreviewData();
 
   try {
+    assert.equal(previewData.site.media_origin, 'https://media.example.com');
+    assert.equal(Object.hasOwn(previewData.site, 'media_base_url'), false);
+    assert.equal(previewData.content.posts.every((post) => !Object.hasOwn(post, 'id')), true);
     await assert.doesNotReject(
-      () => buildDevSnapshot({ themeDir, previewData: defaultPreviewData() }),
+      () => buildDevSnapshot({ themeDir, previewData }),
     );
   } finally {
     await fs.rm(themeDir, { recursive: true, force: true });
   }
 });
 
-test('buildDevSnapshot serves canonical v0.6 routes, assets, and special files', async () => {
+test('buildDevSnapshot serves canonical v0.7 routes, assets, and special files', async () => {
   const themeDir = await createThemeDir(validThemeFiles());
 
   try {
@@ -249,7 +253,7 @@ test('resolveSnapshotResponse serves only generated search artifacts under _zero
 
   try {
     const previewData = defaultPreviewData();
-    previewData.site.search = true;
+    previewData.site.search = { enabled: true };
 
     const snapshot = await buildDevSnapshot({ themeDir, previewData });
     const searchJson = resolveSnapshotResponse('/_zeropress/search.json', snapshot);
@@ -274,12 +278,12 @@ test('resolveSnapshotResponse serves only generated search artifacts under _zero
   }
 });
 
-test('buildDevSnapshot renders fallback robots.txt from site.indexing policy', async () => {
+test('buildDevSnapshot renders fallback robots.txt from site.robots policy', async () => {
   const themeDir = await createThemeDir(validThemeFiles());
 
   try {
     const previewData = defaultPreviewData();
-    previewData.site.indexing = false;
+    previewData.site.robots = {allow_indexing: false};
 
     const snapshot = await buildDevSnapshot({ themeDir, previewData });
     const robots = resolveSnapshotResponse('/robots.txt', snapshot);
@@ -486,12 +490,14 @@ test('resolveDevResponse serves exact public files as fallback', async () => {
     await fs.mkdir(path.join(publicDir, 'vendor'), { recursive: true });
     await fs.mkdir(path.join(publicDir, 'docs'), { recursive: true });
     await fs.writeFile(path.join(publicDir, 'favicon.ico'), 'icon', 'utf8');
+    await fs.writeFile(path.join(publicDir, 'favicon.dark.ico'), 'dark icon', 'utf8');
     await fs.writeFile(path.join(publicDir, 'vendor', 'app.js'), 'console.log("public")', 'utf8');
     await fs.writeFile(path.join(publicDir, 'docs', 'foo.md'), '# Foo', 'utf8');
     await fs.writeFile(path.join(publicDir, 'docs', 'index.html'), '<h1>Docs index</h1>', 'utf8');
 
     const snapshot = await buildDevSnapshot({ themeDir, previewData: defaultPreviewData() });
     const favicon = await resolveDevResponse('/favicon.ico', snapshot, publicDir);
+    const darkFavicon = await resolveDevResponse('/favicon.dark.ico', snapshot, publicDir);
     const script = await resolveDevResponse('/vendor/app.js', snapshot, publicDir);
     const markdown = await resolveDevResponse('/docs/foo.md', snapshot, publicDir);
     const directoryIndex = await resolveDevResponse('/docs/', snapshot, publicDir);
@@ -500,6 +506,9 @@ test('resolveDevResponse serves exact public files as fallback', async () => {
     assert.equal(favicon.status, 200);
     assert.equal(favicon.contentType, 'image/x-icon');
     assert.equal(responseText(favicon), 'icon');
+    assert.equal(darkFavicon.status, 200);
+    assert.equal(darkFavicon.contentType, 'image/x-icon');
+    assert.equal(responseText(darkFavicon), 'dark icon');
     assert.equal(script.contentType, 'text/javascript; charset=utf-8');
     assert.equal(responseText(script), 'console.log("public")');
     assert.equal(markdown.contentType, 'text/markdown; charset=utf-8');
@@ -522,6 +531,7 @@ test('buildDevSnapshot injects discovered public favicon links', async () => {
   try {
     await fs.mkdir(publicDir, { recursive: true });
     await fs.writeFile(path.join(publicDir, 'favicon.ico'), 'icon', 'utf8');
+    await fs.writeFile(path.join(publicDir, 'favicon.dark.ico'), 'dark icon', 'utf8');
     await fs.writeFile(path.join(publicDir, 'favicon.svg'), '<svg></svg>', 'utf8');
     await fs.writeFile(path.join(publicDir, 'favicon.png'), 'png', 'utf8');
     await fs.writeFile(path.join(publicDir, 'apple-touch-icon.png'), 'apple', 'utf8');
@@ -530,9 +540,10 @@ test('buildDevSnapshot injects discovered public favicon links', async () => {
     const response = await resolveSnapshotResponse('/index.html', snapshot);
     const html = responseText(response);
 
-    assert.match(html, /<link rel="icon" href="\/favicon\.ico" sizes="any">/);
-    assert.match(html, /<link rel="icon" href="\/favicon\.svg" type="image\/svg\+xml">/);
-    assert.match(html, /<link rel="icon" href="\/favicon\.png" type="image\/png">/);
+    assert.match(html, /<link rel="icon" href="\/favicon\.ico" media="\(prefers-color-scheme: light\)">/);
+    assert.match(html, /<link rel="icon" href="\/favicon\.dark\.ico" media="\(prefers-color-scheme: dark\)">/);
+    assert.match(html, /<link rel="icon" href="\/favicon\.svg" type="image\/svg\+xml" media="\(prefers-color-scheme: light\)">/);
+    assert.match(html, /<link rel="icon" href="\/favicon\.png" type="image\/png" media="\(prefers-color-scheme: light\)">/);
     assert.match(html, /<link rel="apple-touch-icon" href="\/apple-touch-icon\.png">/);
   } finally {
     await fs.rm(themeDir, { recursive: true, force: true });
