@@ -1,9 +1,3 @@
-export const REQUIRED_TEMPLATES = ['layout.html', 'index.html', 'post.html', 'page.html'];
-export const OPTIONAL_TEMPLATES = ['archive.html', 'category.html', 'tag.html'];
-export const REQUIRED_FILES = ['theme.json', 'assets/style.css'];
-
-export const ALLOWED_SLOTS = new Set(['content', 'header', 'footer', 'meta']);
-
 export const EXCLUDE_DEFAULTS = new Set([
   '.git',
   'node_modules',
@@ -11,7 +5,9 @@ export const EXCLUDE_DEFAULTS = new Set([
   '__MACOSX',
   '.DS_Store',
   'package-lock.json',
+  'npm-shrinkwrap.json',
   'pnpm-lock.yaml',
   'yarn.lock',
+  'bun.lock',
   'bun.lockb',
 ]);

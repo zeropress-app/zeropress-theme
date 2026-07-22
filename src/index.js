@@ -26,8 +26,7 @@ export async function run(argv) {
 
   if (command === 'validate') {
     const code = await runValidate(rest);
-    process.exit(code);
-    return;
+    return code;
   }
 
   if (command === 'pack') {
@@ -48,7 +47,7 @@ function printHelp() {
   console.log(`zeropress-theme - ZeroPress theme development toolkit
 
 Usage:
-  zeropress-theme dev <themeDir> [--data <path>] [--public-dir <dir>] [--host <ip>] [--port <n>] [--strict-port] [--open] [--no-js]
+  zeropress-theme dev <themeDir> [--data <path>] [--public-dir <dir>] [--host <host>] [--port <n>] [--strict-port] [--no-js]
   zeropress-theme validate <themeDir|theme.zip> [--json]
   zeropress-theme pack <themeDir> [--out <dir>] [--name <zipFile>] [--dry-run]
 

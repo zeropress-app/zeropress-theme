@@ -1,18 +1,22 @@
 import fs from 'node:fs/promises';
-import { watch as watchFs } from 'node:fs';
+import { constants as fsConstants, createReadStream } from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
-import { spawn } from 'node:child_process';
+import { Transform } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { WebSocketServer } from 'ws';
 import { buildSiteFromThemeDir, MemoryWriter } from '@zeropress/build-core';
 import { createColor } from './color.js';
-import { getThemeDir } from './helpers.js';
+import { getThemeDir, resolveCanonicalDirectoryRoot } from './helpers.js';
+import { toTerminalSafeText } from './terminal.js';
+import { createWatcherManager } from './watchers.js';
 
 const DEV_BUILD_OPTIONS = {
   assetHashing: false,
 };
 
 export const DEFAULT_DEV_PORT = 4000;
+export const DEV_WEBSOCKET_MAX_PAYLOAD_BYTES = 1024;
 const PREVIEW_DATA_VERSION = '0.7';
 const DEFAULT_PUBLIC_DIR_NAME = 'public';
 const PUBLIC_DIR_ENV_NAME = 'ZEROPRESS_PUBLIC_DIR';
@@ -26,9 +30,12 @@ const PUBLIC_FAVICON_FILES = Object.freeze({
 const PUBLIC_SITEMAP_STYLESHEET_FILE = 'sitemap.xsl';
 const DEFAULT_PERMALINK_OUTPUT_STYLE = 'directory';
 const PERMALINK_OUTPUT_STYLES = new Set(['directory', 'html-extension']);
+const INTERNAL_SERVER_ERROR_BODY = 'Internal Server Error';
 
 const CONTENT_TYPES = new Map([
+  ['.avif', 'image/avif'],
   ['.css', 'text/css; charset=utf-8'],
+  ['.eot', 'application/vnd.ms-fontobject'],
   ['.gif', 'image/gif'],
   ['.htm', 'text/html; charset=utf-8'],
   ['.html', 'text/html; charset=utf-8'],
@@ -43,6 +50,7 @@ const CONTENT_TYPES = new Map([
   ['.png', 'image/png'],
   ['.svg', 'image/svg+xml'],
   ['.txt', 'text/plain; charset=utf-8'],
+  ['.ttf', 'font/ttf'],
   ['.webp', 'image/webp'],
   ['.woff', 'font/woff'],
   ['.woff2', 'font/woff2'],
@@ -69,9 +77,12 @@ export async function runDev(argv) {
   if (!positional[0]) {
     throw new Error('dev requires a themeDir argument');
   }
-  const themeDir = getThemeDir(positional[0]);
+  if (positional.length !== 1) {
+    throw new Error('dev accepts exactly one themeDir argument');
+  }
+  const requestedThemeDir = getThemeDir(positional[0]);
+  const themeDir = await resolveCanonicalDirectoryRoot(requestedThemeDir, { label: 'Theme directory' });
   const effectivePublicDir = resolvePublicDir(process.cwd(), flags.publicDir);
-  assertPublicPathDoesNotOverlap('Theme directory', themeDir, process.cwd(), effectivePublicDir);
   const host = flags.host || '127.0.0.1';
   const port = Number(flags.port || DEFAULT_DEV_PORT);
   const strictPort = flags.strictPort === true;
@@ -82,6 +93,12 @@ export async function runDev(argv) {
   }
 
   const publicDir = await resolveExistingPublicDir(effectivePublicDir);
+  await assertPublicPathDoesNotOverlap(
+    'Theme directory',
+    themeDir,
+    process.cwd(),
+    publicDir || effectivePublicDir,
+  );
   const buildSnapshot = async () => buildDevSnapshot({
     themeDir,
     previewData: await loadPreviewData(flags.data),
@@ -91,16 +108,43 @@ export async function runDev(argv) {
   let snapshot = await buildSnapshot();
   const server = http.createServer((req, res) => {
     handleRequest(req, res, snapshot, publicDir, { noJs }).catch((error) => {
-      send(res, 500, 'text/plain; charset=utf-8', `Internal error: ${error.message}`);
+      handleRequestFailure(res, error);
     });
   });
-  const actualPort = await listenServerWithFallback(server, host, port, { strictPort });
-
-  const wss = new WebSocketServer({ server, path: '/__zeropress_ws' });
+  let wss;
+  let watchers;
+  let actualPort;
   const sockets = new Set();
-  let shuttingDown = false;
+  let cleanupPromise;
+  let sigintHandler;
+  let sigtermHandler;
   let rebuilding = false;
   let queued = false;
+  let watcherFailureHandled = false;
+
+  const cleanup = () => {
+    if (cleanupPromise) {
+      return cleanupPromise;
+    }
+    cleanupPromise = (async () => {
+      if (sigintHandler) {
+        process.off('SIGINT', sigintHandler);
+      }
+      if (sigtermHandler) {
+        process.off('SIGTERM', sigtermHandler);
+      }
+      await watchers?.close();
+      for (const client of wss?.clients || []) {
+        client.terminate();
+      }
+      for (const socket of sockets) {
+        socket.destroy();
+      }
+      await closeWebSocketServer(wss);
+      await closeHttpServer(server);
+    })();
+    return cleanupPromise;
+  };
 
   server.on('connection', (socket) => {
     sockets.add(socket);
@@ -116,21 +160,24 @@ export async function runDev(argv) {
     }
 
     rebuilding = true;
-    do {
-      queued = false;
-      const result = await rebuildDevSnapshot(snapshot, buildSnapshot);
-      if (result.changed) {
-        snapshot = result.snapshot;
-        for (const client of wss.clients) {
-          if (client.readyState === 1) {
-            client.send('reload');
+    try {
+      do {
+        queued = false;
+        const result = await rebuildDevSnapshot(snapshot, buildSnapshot);
+        if (result.changed) {
+          snapshot = result.snapshot;
+          for (const client of wss?.clients || []) {
+            if (client.readyState === 1) {
+              client.send('reload');
+            }
           }
+        } else {
+          console.log(`[dev] rebuild failed: ${toTerminalSafeText(result.error.message)}`);
         }
-      } else {
-        console.log(`[dev] rebuild failed: ${result.error.message}`);
-      }
-    } while (queued);
-    rebuilding = false;
+      } while (queued);
+    } finally {
+      rebuilding = false;
+    }
   };
 
   const extraWatchPaths = [];
@@ -140,54 +187,117 @@ export async function runDev(argv) {
   }
 
   const extraWatchDirs = publicDir ? [publicDir] : [];
-  const watchers = await createWatchers(themeDir, extraWatchPaths, extraWatchDirs, triggerRebuild);
+  const handleWatcherFailure = async (error) => {
+    if (watcherFailureHandled) {
+      return;
+    }
+    watcherFailureHandled = true;
+    process.exitCode = 1;
+    console.error(`[dev] file watcher failed: ${toTerminalSafeText(error?.message || error)}`);
+    console.error('[dev] Resolve the filesystem problem and restart zeropress-theme dev.');
+    await cleanup();
+  };
 
-  const url = `http://${host}:${actualPort}`;
+  try {
+    watchers = await createWatchers(
+      themeDir,
+      extraWatchPaths,
+      extraWatchDirs,
+      triggerRebuild,
+      handleWatcherFailure,
+    );
+    actualPort = await listenServerWithFallback(server, host, port, { strictPort });
+    wss = createLiveReloadWebSocketServer(server);
+  } catch (error) {
+    await cleanup();
+    throw error;
+  }
+
+  const url = formatDevServerUrl(host, actualPort);
   console.log(formatDevRunningMessage(url));
   if (noJs) {
     console.log('[dev] No-JS preview mode enabled');
   }
-  if (flags.open === true) {
-    openBrowser(url);
-  }
 
-  const shutdown = (signal) => {
-    if (shuttingDown) {
-      return;
-    }
-    shuttingDown = true;
+  const shutdown = async (signal) => {
     console.log(`[dev] received ${signal}, shutting down...`);
-
-    for (const watcher of watchers) {
-      watcher.close();
-    }
-
-    for (const client of wss.clients) {
-      client.terminate();
-    }
-    wss.close();
-
-    for (const socket of sockets) {
-      socket.destroy();
-    }
-
     const forceExit = setTimeout(() => {
       process.exit(0);
     }, 1500);
     forceExit.unref();
-
-    server.close(() => {
+    try {
+      await cleanup();
+    } finally {
       clearTimeout(forceExit);
       process.exit(0);
-    });
+    }
   };
 
-  process.once('SIGINT', () => shutdown('SIGINT'));
-  process.once('SIGTERM', () => shutdown('SIGTERM'));
+  sigintHandler = () => { shutdown('SIGINT'); };
+  sigtermHandler = () => { shutdown('SIGTERM'); };
+  process.once('SIGINT', sigintHandler);
+  process.once('SIGTERM', sigtermHandler);
+}
+
+export function createLiveReloadWebSocketServer(server, {
+  WebSocketServerClass = WebSocketServer,
+  log = console.log,
+} = {}) {
+  const wss = new WebSocketServerClass({
+    server,
+    path: '/__zeropress_ws',
+    maxPayload: DEV_WEBSOCKET_MAX_PAYLOAD_BYTES,
+  });
+
+  wss.on('error', (error) => {
+    log(`[dev] websocket server error: ${toTerminalSafeText(error?.message || error)}`);
+  });
+  wss.on('connection', (client) => {
+    client.on('error', () => {
+      client.terminate();
+    });
+    client.on('message', () => {
+      if (client.readyState === 1) {
+        client.close(1008, 'Client messages are not supported');
+      }
+    });
+  });
+
+  return wss;
+}
+
+async function closeWebSocketServer(wss) {
+  if (!wss) {
+    return;
+  }
+  await new Promise((resolve) => {
+    try {
+      wss.close(() => resolve());
+    } catch {
+      resolve();
+    }
+  });
+}
+
+async function closeHttpServer(server) {
+  if (!server.listening) {
+    return;
+  }
+  await new Promise((resolve) => {
+    server.close(() => resolve());
+  });
 }
 
 export function formatDevRunningMessage(url, stream = process.stdout) {
-  return createColor(stream).green(`[dev] running at ${url}`);
+  return createColor(stream).green(`[dev] running at ${toTerminalSafeText(url)}`);
+}
+
+export function formatDevServerUrl(host, port) {
+  const normalizedHost = String(host);
+  const urlHost = normalizedHost.includes(':')
+    ? `[${normalizedHost.replaceAll('%', '%25')}]`
+    : normalizedHost;
+  return `http://${urlHost}:${port}`;
 }
 
 function parseDevArgs(argv) {
@@ -202,11 +312,6 @@ function parseDevArgs(argv) {
     }
 
     const key = token.slice(2);
-    if (key === 'open') {
-      flags.open = true;
-      continue;
-    }
-
     if (key === 'strict-port') {
       flags.strictPort = true;
       continue;
@@ -219,7 +324,7 @@ function parseDevArgs(argv) {
 
     if (key === 'port' || key === 'host' || key === 'data' || key === 'public-dir') {
       const value = argv[i + 1];
-      if (!value) {
+      if (!value || value.startsWith('--')) {
         throw new Error(`--${key} requires a value`);
       }
       flags[key === 'public-dir' ? 'publicDir' : key] = value;
@@ -570,25 +675,80 @@ export async function resolvePublicFileResponse(pathname, publicDir = null) {
       continue;
     }
 
-    let stat;
+    const stat = await lstatPublicFileWithoutSymlinks(publicDir, outputPath);
+
+    if (!stat?.isFile()) {
+      continue;
+    }
+
+    const canonicalPublicDir = await fs.realpath(publicDir);
+    const canonicalFilePath = await fs.realpath(fullPath);
+    if (!isPathInside(canonicalPublicDir, canonicalFilePath)) {
+      continue;
+    }
+
+    let fileHandle;
     try {
-      stat = await fs.lstat(fullPath);
+      fileHandle = await fs.open(
+        canonicalFilePath,
+        fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW || 0),
+      );
+      const openedStat = await fileHandle.stat();
+      if (!openedStat.isFile()) {
+        await fileHandle.close();
+        continue;
+      }
+
+      return {
+        status: 200,
+        contentType: getContentType(canonicalFilePath),
+        contentLength: openedStat.size,
+        fileHandle,
+      };
     } catch (error) {
-      if (error && error.code === 'ENOENT') {
+      await fileHandle?.close().catch(() => {});
+      if (error && ['ELOOP', 'ENOENT', 'ENOTDIR'].includes(error.code)) {
         continue;
       }
       throw error;
     }
+  }
 
-    if (!stat.isFile()) {
-      continue;
+  return null;
+}
+
+async function lstatPublicFileWithoutSymlinks(publicDir, outputPath) {
+  const rootPath = path.resolve(publicDir);
+  const pathSegments = outputPath.split('/').filter(Boolean);
+  let currentPath = rootPath;
+
+  for (let index = -1; index < pathSegments.length; index += 1) {
+    if (index >= 0) {
+      currentPath = path.join(currentPath, pathSegments[index]);
     }
 
-    return {
-      status: 200,
-      contentType: getContentType(fullPath),
-      body: await fs.readFile(fullPath),
-    };
+    let stat;
+    try {
+      stat = await fs.lstat(currentPath);
+    } catch (error) {
+      if (error && (error.code === 'ENOENT' || error.code === 'ENOTDIR')) {
+        return null;
+      }
+      throw error;
+    }
+
+    if (stat.isSymbolicLink()) {
+      return null;
+    }
+
+    const isFinalPath = index === pathSegments.length - 1;
+    if (!isFinalPath && !stat.isDirectory()) {
+      return null;
+    }
+
+    if (isFinalPath) {
+      return stat;
+    }
   }
 
   return null;
@@ -655,12 +815,12 @@ export async function discoverPublicSitemapStylesheet(publicDir) {
   return stat.isFile() ? `/${PUBLIC_SITEMAP_STYLESHEET_FILE}` : undefined;
 }
 
-export function resolveOutputPath(pathname, outputStyle = DEFAULT_PERMALINK_OUTPUT_STYLE) {
-  return resolveOutputPathCandidates(pathname, outputStyle)[0] || '';
-}
-
 function resolveOutputPathCandidates(pathname, outputStyle = DEFAULT_PERMALINK_OUTPUT_STYLE) {
   const normalized = normalizeRequestPath(pathname);
+
+  if (isUnsafeRequestPath(normalized)) {
+    return [];
+  }
 
   if (normalized === '/') {
     return ['index.html'];
@@ -674,31 +834,72 @@ function resolveOutputPathCandidates(pathname, outputStyle = DEFAULT_PERMALINK_O
     return [normalized.slice(1)];
   }
 
-  if (normalized.endsWith('.html')) {
-    return [normalized.slice(1)];
-  }
-
   if (normalized.endsWith('/')) {
     return [`${normalized.slice(1)}index.html`];
   }
 
-  if (outputStyle === 'html-extension') {
-    return [`${normalized.slice(1)}.html`];
+  const routeOutputPath = outputStyle === 'html-extension'
+    ? `${normalized.slice(1)}.html`
+    : `${normalized.slice(1)}/index.html`;
+  if (normalized.endsWith('.html')) {
+    return [routeOutputPath, normalized.slice(1)];
   }
 
-  return [`${normalized.slice(1)}/index.html`];
+  return [routeOutputPath];
 }
 
 export async function handleRequest(req, res, snapshot, publicDir = null, { noJs = false } = {}) {
+  let response;
   try {
     const url = new URL(req.url, 'http://localhost');
-    const response = await resolveDevResponse(url.pathname, snapshot, publicDir);
+    response = await resolveDevResponse(url.pathname, snapshot, publicDir);
+    if (response.fileHandle) {
+      await sendPublicFile(res, response, { noJs });
+      return;
+    }
     const body = shouldInjectLiveReload(response.contentType, { noJs })
       ? injectLiveReload(response.body)
       : response.body;
     send(res, response.status, response.contentType, body, noJsHeaders(response.contentType, { noJs }));
   } catch (error) {
-    send(res, 500, 'text/plain; charset=utf-8', `Internal error: ${error.message}`);
+    await response?.fileHandle?.close().catch(() => {});
+    handleRequestFailure(res, error);
+  }
+}
+
+function handleRequestFailure(res, error) {
+  const details = error instanceof Error
+    ? error.stack || error.message
+    : String(error);
+  console.error(`[dev] request failed: ${toTerminalSafeText(details)}`);
+
+  if (!res.headersSent && !res.destroyed) {
+    send(res, 500, 'text/plain; charset=utf-8', INTERNAL_SERVER_ERROR_BODY);
+  }
+}
+
+async function sendPublicFile(res, response, { noJs = false } = {}) {
+  const inject = shouldInjectLiveReload(response.contentType, { noJs });
+  const headers = {
+    'content-type': response.contentType,
+    ...noJsHeaders(response.contentType, { noJs }),
+    ...(!inject ? { 'content-length': String(response.contentLength) } : {}),
+  };
+  res.writeHead(response.status, headers);
+
+  const input = createReadStream(null, {
+    fd: response.fileHandle.fd,
+    autoClose: false,
+  });
+  try {
+    if (inject) {
+      await pipeline(input, createLiveReloadTransform(), res);
+    } else {
+      await pipeline(input, res);
+    }
+  } finally {
+    input.destroy();
+    await response.fileHandle.close().catch(() => {});
   }
 }
 
@@ -722,11 +923,24 @@ function isHtmlContentType(contentType) {
 
 function injectLiveReload(html) {
   const markup = typeof html === 'string' ? html : Buffer.from(html).toString('utf8');
-  const script = `\n<script>\n(() => {\n  const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/__zeropress_ws');\n  ws.onmessage = (event) => { if (event.data === 'reload') location.reload(); };\n})();\n</script>\n`;
-  if (markup.includes('</body>')) {
-    return markup.replace('</body>', `${script}</body>`);
-  }
-  return `${markup}${script}`;
+  return `${markup}${liveReloadScript()}`;
+}
+
+function createLiveReloadTransform() {
+  const script = Buffer.from(liveReloadScript());
+
+  return new Transform({
+    transform(chunk, _encoding, callback) {
+      callback(null, chunk);
+    },
+    flush(callback) {
+      callback(null, script);
+    },
+  });
+}
+
+function liveReloadScript() {
+  return `\n<script>\n(() => {\n  const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/__zeropress_ws');\n  ws.onmessage = (event) => { if (event.data === 'reload') location.reload(); };\n})();\n</script>\n`;
 }
 
 function send(res, status, type, body, headers = {}) {
@@ -751,7 +965,7 @@ function normalizeOutputPath(filePath) {
 
 function resolvePublicOutputPathCandidates(pathname) {
   const normalized = normalizeRequestPath(pathname);
-  if (normalized === '/') {
+  if (normalized === '/' || isUnsafeRequestPath(normalized)) {
     return [];
   }
 
@@ -765,7 +979,12 @@ function resolvePublicOutputPathCandidates(pathname) {
 function resolvePublicFilePath(publicDir, outputPath) {
   const fullPath = path.resolve(publicDir, outputPath);
   const relativePath = path.relative(publicDir, fullPath);
-  if (!relativePath || relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+  if (
+    !relativePath
+    || relativePath === '..'
+    || relativePath.startsWith(`..${path.sep}`)
+    || path.isAbsolute(relativePath)
+  ) {
     return null;
   }
 
@@ -795,11 +1014,14 @@ export async function resolveExistingPublicDir(publicDir = resolvePublicDir()) {
     throw error;
   }
 
+  if (stat.isSymbolicLink()) {
+    throw new Error(`Public path must be a real directory and must not be a symbolic link: ${publicDir}`);
+  }
   if (!stat.isDirectory()) {
     throw new Error(`Public path is not a directory: ${publicDir}`);
   }
 
-  return publicDir;
+  return resolveCanonicalDirectoryRoot(publicDir, { label: 'Public path' });
 }
 
 export function shouldIgnorePublicEntry(name) {
@@ -814,13 +1036,43 @@ export function shouldIgnorePublicEntry(name) {
   );
 }
 
-export function assertPublicPathDoesNotOverlap(label, candidatePath, cwd = process.cwd(), publicDir = resolvePublicDir(cwd)) {
+export async function assertPublicPathDoesNotOverlap(label, candidatePath, cwd = process.cwd(), publicDir = resolvePublicDir(cwd)) {
   const resolvedCandidate = path.resolve(cwd, candidatePath);
-  if (!pathsOverlap(publicDir, resolvedCandidate)) {
+  const [canonicalPublicDir, canonicalCandidate] = await Promise.all([
+    resolvePathIdentity(publicDir),
+    resolvePathIdentity(resolvedCandidate),
+  ]);
+
+  if (!pathsOverlap(canonicalPublicDir, canonicalCandidate)) {
     return;
   }
 
   throw new Error(`${label} must not overlap the public directory: ${resolvedCandidate}`);
+}
+
+async function resolvePathIdentity(inputPath) {
+  const resolvedPath = path.resolve(inputPath);
+  const missingSegments = [];
+  let existingPath = resolvedPath;
+
+  while (true) {
+    try {
+      const realPath = await fs.realpath(existingPath);
+      return path.join(realPath, ...missingSegments.reverse());
+    } catch (error) {
+      if (!error || error.code !== 'ENOENT') {
+        throw error;
+      }
+
+      const parentPath = path.dirname(existingPath);
+      if (parentPath === existingPath) {
+        throw error;
+      }
+
+      missingSegments.push(path.basename(existingPath));
+      existingPath = parentPath;
+    }
+  }
 }
 
 function pathsOverlap(firstPath, secondPath) {
@@ -831,7 +1083,10 @@ function pathsOverlap(firstPath, secondPath) {
 
 function isPathInside(parentPath, childPath) {
   const relativePath = path.relative(parentPath, childPath);
-  return Boolean(relativePath) && !relativePath.startsWith('..') && !path.isAbsolute(relativePath);
+  return Boolean(relativePath)
+    && relativePath !== '..'
+    && !relativePath.startsWith(`..${path.sep}`)
+    && !path.isAbsolute(relativePath);
 }
 
 function safeDecodePath(value) {
@@ -842,64 +1097,24 @@ function safeDecodePath(value) {
   }
 }
 
-async function createWatchers(rootDir, extraFilePaths, extraDirPaths, onChange) {
-  const watchers = [];
-  const watchedDirs = new Set();
-
-  async function watchDir(dir) {
-    if (watchedDirs.has(dir)) {
-      return;
-    }
-
-    watchedDirs.add(dir);
-    const watcher = watchFs(dir, { persistent: true }, () => {
-      onChange().catch((error) => {
-        console.log(`[dev] reload trigger error: ${error.message}`);
-      });
-    });
-    watchers.push(watcher);
-
-    const entries = await fs.readdir(dir, { withFileTypes: true });
-    for (const entry of entries) {
-      if (!entry.isSymbolicLink() && !shouldIgnorePublicEntry(entry.name) && entry.isDirectory()) {
-        await watchDir(path.join(dir, entry.name));
-      }
-    }
-  }
-
-  await watchDir(rootDir);
-
-  for (const dirPath of extraDirPaths) {
-    await watchDir(dirPath);
-  }
-
-  for (const filePath of extraFilePaths) {
-    const parentDir = path.dirname(filePath);
-    if (watchedDirs.has(parentDir)) {
-      continue;
-    }
-
-    const targetName = path.basename(filePath);
-    const watcher = watchFs(parentDir, { persistent: true }, (_, changedName) => {
-      if (!changedName || String(changedName) === targetName) {
-        onChange().catch((error) => {
-          console.log(`[dev] reload trigger error: ${error.message}`);
-        });
-      }
-    });
-    watchers.push(watcher);
-  }
-
-  return watchers;
+function isUnsafeRequestPath(value) {
+  return value.includes('\\') || /[\u0000-\u001f\u007f-\u009f]/u.test(value);
 }
 
-function openBrowser(url) {
-  const platform = process.platform;
-  if (platform === 'darwin') {
-    spawn('open', [url], { stdio: 'ignore', detached: true }).unref();
-  } else if (platform === 'win32') {
-    spawn('cmd', ['/c', 'start', '', url], { stdio: 'ignore', detached: true }).unref();
-  } else {
-    spawn('xdg-open', [url], { stdio: 'ignore', detached: true }).unref();
-  }
+async function createWatchers(rootDir, extraFilePaths, extraDirPaths, onChange, onFatalError) {
+  return createWatcherManager({
+    roots: [
+      { path: rootDir },
+      ...extraDirPaths.map((dirPath) => ({
+        path: dirPath,
+        shouldIgnoreEntry: shouldIgnorePublicEntry,
+      })),
+    ],
+    extraFilePaths,
+    onChange,
+    onChangeError: (error) => {
+      console.log(`[dev] reload trigger error: ${toTerminalSafeText(error.message)}`);
+    },
+    onFatalError,
+  });
 }

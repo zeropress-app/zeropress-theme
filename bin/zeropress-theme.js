@@ -1,11 +1,18 @@
 #!/usr/bin/env node
 import { run } from '../src/index.js';
 import { createColor } from '../src/color.js';
+import { toTerminalSafeText } from '../src/terminal.js';
 
-run(process.argv.slice(2)).catch((error) => {
-  console.error(colorizeError(`[zeropress-theme] ${error.message}`));
-  process.exit(1);
-});
+run(process.argv.slice(2))
+  .then((code) => {
+    if (Number.isInteger(code)) {
+      process.exitCode = code;
+    }
+  })
+  .catch((error) => {
+    console.error(colorizeError(`[zeropress-theme] ${toTerminalSafeText(error.message)}`));
+    process.exitCode = 1;
+  });
 
 function colorizeError(message) {
   const color = createColor(process.stderr);
