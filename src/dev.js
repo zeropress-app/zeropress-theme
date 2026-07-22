@@ -749,10 +749,6 @@ function normalizeOutputPath(filePath) {
   return String(filePath || '').replace(/^\/+/, '');
 }
 
-function resolvePublicOutputPath(pathname) {
-  return resolvePublicOutputPathCandidates(pathname)[0] || null;
-}
-
 function resolvePublicOutputPathCandidates(pathname) {
   const normalized = normalizeRequestPath(pathname);
   if (normalized === '/') {

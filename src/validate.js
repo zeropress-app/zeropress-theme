@@ -1,9 +1,13 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import JSZip from 'jszip';
 import { validateThemeFiles } from '@zeropress/theme-validator';
 import { createColor } from './color.js';
 import { getThemeDir, walkDirectory } from './helpers.js';
+
+const require = createRequire(import.meta.url);
+const { version: PACKAGE_VERSION } = require('../package.json');
 
 export async function runValidate(argv) {
   const { positional, flags } = parseValidateArgs(argv);
@@ -292,7 +296,7 @@ function toJsonOutput(result) {
     meta: {
       schemaVersion: '1',
       tool: 'zeropress-theme',
-      toolVersion: '0.1.0',
+      toolVersion: PACKAGE_VERSION,
       timestamp: new Date().toISOString(),
     },
   };

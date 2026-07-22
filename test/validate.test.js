@@ -7,6 +7,8 @@ import JSZip from 'jszip';
 import { runPack } from '../src/pack.js';
 import { runValidate, validateThemeDirectory } from '../src/validate.js';
 
+const packageJsonPath = new URL('../package.json', import.meta.url);
+
 async function createThemeDir(files) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-theme-'));
 
@@ -99,6 +101,10 @@ test('runValidate returns 1 and emits json for invalid theme', async () => {
     assert.equal(Array.isArray(payload.errors), true);
     assert.equal(Array.isArray(payload.infos), true);
     assert.equal(payload.errors.some((issue) => issue.path === 'layout.html'), true);
+    const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf8'));
+    assert.equal(payload.meta.schemaVersion, '1');
+    assert.equal(payload.meta.tool, 'zeropress-theme');
+    assert.equal(payload.meta.toolVersion, packageJson.version);
   } finally {
     process.stdout.write = originalWrite;
     await fs.rm(themeDir, { recursive: true, force: true });
