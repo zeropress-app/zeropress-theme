@@ -6,6 +6,7 @@ export function createColor(stream) {
     yellow: (value) => wrap('33', value),
     blue: (value) => wrap('34', value),
     green: (value) => wrap('32', value),
+    bold: (value) => wrap('1', value),
   };
 }
 
