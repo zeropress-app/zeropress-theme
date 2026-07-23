@@ -14,7 +14,7 @@ import {
 } from './bounded-read.js';
 import { createColor } from './color.js';
 import { getThemeDir, resolveCanonicalDirectoryRoot, walkDirectory } from './helpers.js';
-import { toTerminalSafeText } from './terminal.js';
+import { toTerminalSafeMultilineText, toTerminalSafeText } from './terminal.js';
 
 const require = createRequire(import.meta.url);
 const { version: PACKAGE_VERSION } = require('../package.json');
@@ -617,7 +617,7 @@ function printHuman(result, target) {
   const status = validationStatus(result);
   blocks.push([
     colorStatus(status.title, status.level, color),
-    `Target: ${label}: ${toTerminalSafeText(target.path)}`,
+    `Target: ${toTerminalSafeText(target.path)} (${label})`,
     `Errors: ${result.errors.length}`,
     `Warnings: ${result.warnings.length}`,
     `Info: ${(result.infos || []).length}`,
@@ -634,7 +634,6 @@ function printHuman(result, target) {
     blocks.push(formatHumanIssue('info', info, { color }));
   }
 
-  blocks.push(colorStatus(status.result, status.level, color));
   console.log(blocks.join('\n\n'));
 }
 
@@ -643,33 +642,19 @@ function validationStatus(result) {
     return {
       level: 'error',
       title: 'Theme validation failed',
-      result: `Result: failed because ${result.errors.length} error(s) were found.`,
     };
   }
 
   if (result.warnings.length > 0) {
-    const infoSuffix = (result.infos || []).length > 0
-      ? ` and ${(result.infos || []).length} info note(s)`
-      : '';
     return {
       level: 'warning',
       title: 'Theme validation passed with warnings',
-      result: `Result: passed with ${result.warnings.length} warning(s)${infoSuffix}.`,
-    };
-  }
-
-  if ((result.infos || []).length > 0) {
-    return {
-      level: 'success',
-      title: 'Theme validation passed',
-      result: `Result: passed with ${(result.infos || []).length} info note(s).`,
     };
   }
 
   return {
     level: 'success',
     title: 'Theme validation passed',
-    result: 'Result: passed with no errors or warnings.',
   };
 }
 
@@ -724,7 +709,7 @@ function formatHumanIssue(level, issue, options = {}) {
     );
   }
   if (issue.hint) {
-    lines.push('', 'Hint:', toTerminalSafeText(issue.hint));
+    lines.push('', 'Hint:', toTerminalSafeMultilineText(issue.hint));
   }
   return lines.join('\n');
 }

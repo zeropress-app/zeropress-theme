@@ -5,3 +5,10 @@ export function toTerminalSafeText(value) {
     `\\u${character.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')}`
   ));
 }
+
+export function toTerminalSafeMultilineText(value) {
+  return String(value ?? '')
+    .split('\n')
+    .map((line) => toTerminalSafeText(line))
+    .join('\n');
+}
