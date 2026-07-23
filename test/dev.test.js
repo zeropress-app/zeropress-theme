@@ -105,8 +105,8 @@ function validThemeFiles() {
     }),
     'layout.html': '<html><head><title>{{meta.title}}</title>{{meta.head_tags}}</head><body>{{slot:header}}<main>{{slot:content}}</main>{{slot:footer}}</body></html>',
     'index.html': '<h1>{{site.title}}</h1><div id="posts">{{#for post in posts.items}}<article>{{post.title}} {{post.excerpt}}</article>{{/for}}</div>',
-    'post.html': '<article><h1>{{post.title}}</h1><img class="author-avatar" src="{{post.author.avatar}}" alt=""><img class="post-featured-image" src="{{post.featured_image}}" alt=""><div>{{post.author.display_name}}</div><div>{{post.html}}</div></article>',
-    'page.html': '<section><h1>{{page.title}}</h1><img class="page-featured-image" src="{{page.featured_image}}" alt=""><div>{{page.html}}</div></section>',
+    'post.html': '<article><h1>{{post.title}}</h1>{{#if post.author.avatar}}<img class="author-avatar" src="{{post.author.avatar}}" alt="">{{/if}}{{#if post.featured_image}}<img class="post-featured-image" src="{{post.featured_image}}" alt="">{{/if}}<div>{{post.author.display_name}}</div><div>{{post.html}}</div></article>',
+    'page.html': '<section><h1>{{page.title}}</h1>{{#if page.featured_image}}<img class="page-featured-image" src="{{page.featured_image}}" alt="">{{/if}}<div>{{page.html}}</div></section>',
     'archive.html': '<section><h1>Archive</h1>{{#for group in archive.groups}}<h2>{{group.label}}</h2>{{#for post in group.items}}<article>{{post.title}}</article>{{/for}}{{/for}}</section>',
     'category.html': '<section><h1>Category</h1><div>{{taxonomy.name}} ({{taxonomy.count}})</div>{{#for post in posts.items}}<article>{{post.title}}</article>{{/for}}</section>',
     'tag.html': '<section><h1>Tag</h1><div>{{taxonomy.name}} ({{taxonomy.count}})</div>{{#for post in posts.items}}<article>{{post.title}}</article>{{/for}}</section>',
@@ -344,9 +344,41 @@ test('defaultPreviewData builds a valid v0.7 dev snapshot', async () => {
   const previewData = defaultPreviewData();
 
   try {
-    assert.equal(previewData.site.media_origin, 'https://media.example.com');
+    assert.equal(previewData.site.media_origin, '');
     assert.equal(Object.hasOwn(previewData.site, 'media_base_url'), false);
+    assert.equal(
+      previewData.content.authors.every((author) => !Object.hasOwn(author, 'avatar')),
+      true,
+    );
+    assert.equal(
+      previewData.content.posts.every((post) => !Object.hasOwn(post, 'featured_image')),
+      true,
+    );
+    assert.equal(
+      previewData.content.posts.every((post) => !Object.hasOwn(post, 'allow_comments')),
+      true,
+    );
+    assert.equal(
+      previewData.content.pages.every((page) => !Object.hasOwn(page, 'featured_image')),
+      true,
+    );
     assert.equal(previewData.content.posts.every((post) => !Object.hasOwn(post, 'id')), true);
+    assert.equal(previewData.widgets.sidebar.name, 'Sidebar Widgets');
+    assert.deepEqual(
+      previewData.widgets.sidebar.items.map((widget) => widget.type),
+      ['profile', 'search', 'recent-posts', 'categories', 'tags', 'archives', 'link-list'],
+    );
+    assert.deepEqual(previewData.widgets.sidebar.items[0].settings, {
+      display_name: 'Admin',
+      affiliation: 'ZeroPress Theme Author',
+      bio_short: 'A short profile widget for theme development and layout testing.',
+    });
+    assert.deepEqual(previewData.widgets.sidebar.items.at(-1).settings.links, [
+      { label: 'About', url: '/about/', target: '_self' },
+      { label: 'Archive', url: '/archive/', target: '_self' },
+      { label: 'ZeroPress Documentation', url: 'https://zeropress.dev/', target: '_blank' },
+      { label: 'ZeroPress on GitHub', url: 'https://github.com/zeropress-app/', target: '_blank' },
+    ]);
     await assert.doesNotReject(
       () => buildDevSnapshot({ themeDir, previewData }),
     );
@@ -387,12 +419,11 @@ test('buildDevSnapshot serves canonical v0.7 routes, assets, and special files',
     assert.match(responseText(post), /<title>Hello ZeroPress - ZeroPress Preview<\/title>/);
     assert.match(responseText(post), /property="og:type" content="article"/);
     assert.match(responseText(post), /property="article:published_time" content="2026-02-14T09:00:00Z"/);
-    assert.match(responseText(post), /class="author-avatar" src="https:\/\/media\.example\.com\/images\/author-avatar\.png\?size=96"/);
-    assert.match(responseText(post), /class="post-featured-image" src="https:\/\/media\.example\.com\/images\/post-share\.png\?fit=cover"/);
+    assert.doesNotMatch(responseText(post), /class="author-avatar"/);
+    assert.doesNotMatch(responseText(post), /class="post-featured-image"/);
     assert.match(responseText(page), /About/);
     assert.match(responseText(page), /<title>About - ZeroPress Preview<\/title>/);
     assert.match(responseText(page), /property="og:type" content="website"/);
-    assert.match(responseText(page), /class="page-featured-image" src="https:\/\/media\.example\.com\/images\/about-share\.png\?format=webp"/);
     assert.doesNotMatch(responseText(page), /property="article:published_time"/);
     assert.match(responseText(archive), /Archive/);
     assert.match(responseText(archivePage2), /Archive Patterns/);

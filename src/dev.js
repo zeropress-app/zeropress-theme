@@ -429,7 +429,7 @@ export function defaultPreviewData() {
       title: 'ZeroPress Preview',
       description: 'Default preview data',
       url: 'https://example.com',
-      media_origin: 'https://media.example.com',
+      media_origin: '',
       locale: 'en-US',
       posts_per_page: 2,
       date_style: 'medium',
@@ -441,7 +441,6 @@ export function defaultPreviewData() {
         {
           id: 'author-1',
           display_name: 'Admin',
-          avatar: '/images/author-avatar.png?size=96',
         },
       ],
       posts: [
@@ -455,9 +454,7 @@ export function defaultPreviewData() {
           published_at_iso: '2026-02-14T09:00:00Z',
           updated_at_iso: '2026-02-14T09:00:00Z',
           author_id: 'author-1',
-          featured_image: '/images/post-share.png?fit=cover',
           status: 'published',
-          allow_comments: true,
           category_slugs: ['general'],
           tag_slugs: ['intro'],
         },
@@ -472,7 +469,6 @@ export function defaultPreviewData() {
           updated_at_iso: '2026-02-13T09:00:00Z',
           author_id: 'author-1',
           status: 'published',
-          allow_comments: true,
           category_slugs: ['general'],
           tag_slugs: ['intro'],
         },
@@ -487,7 +483,6 @@ export function defaultPreviewData() {
           updated_at_iso: '2026-02-12T09:00:00Z',
           author_id: 'author-1',
           status: 'published',
-          allow_comments: true,
           category_slugs: ['general'],
           tag_slugs: ['intro'],
         },
@@ -499,7 +494,6 @@ export function defaultPreviewData() {
           content: '<p>About page</p>',
           document_type: 'html',
           excerpt: 'About ZeroPress preview page',
-          featured_image: '/images/about-share.png?format=webp',
           status: 'published',
         },
       ],
@@ -519,6 +513,12 @@ export function defaultPreviewData() {
           {
             title: 'Archive',
             url: '/archive/',
+            target: '_self',
+            children: [],
+          },
+          {
+            title: 'About',
+            url: '/about/',
             target: '_self',
             children: [],
           },
@@ -548,7 +548,89 @@ export function defaultPreviewData() {
         ],
       },
     },
-    widgets: {},
+    widgets: {
+      sidebar: {
+        name: 'Sidebar Widgets',
+        items: [
+          {
+            type: 'profile',
+            title: 'About the Author',
+            settings: {
+              display_name: 'Admin',
+              affiliation: 'ZeroPress Theme Author',
+              bio_short: 'A short profile widget for theme development and layout testing.',
+            },
+          },
+          {
+            type: 'search',
+            title: 'Search',
+            settings: {
+              placeholder: 'Search...',
+              button_label: 'Search',
+            },
+          },
+          {
+            type: 'recent-posts',
+            title: 'Recent Posts',
+            settings: {
+              limit: 5,
+              show_date: true,
+            },
+          },
+          {
+            type: 'categories',
+            title: 'Categories',
+            settings: {
+              show_count: true,
+              hierarchical: false,
+            },
+          },
+          {
+            type: 'tags',
+            title: 'Tags',
+            settings: {
+              limit: 20,
+              show_count: true,
+            },
+          },
+          {
+            type: 'archives',
+            title: 'Archives',
+            settings: {
+              limit: 12,
+            },
+          },
+          {
+            type: 'link-list',
+            title: 'Explore',
+            settings: {
+              links: [
+                {
+                  label: 'About',
+                  url: '/about/',
+                  target: '_self',
+                },
+                {
+                  label: 'Archive',
+                  url: '/archive/',
+                  target: '_self',
+                },
+                {
+                  label: 'ZeroPress Documentation',
+                  url: 'https://zeropress.dev/',
+                  target: '_blank',
+                },
+                {
+                  label: 'ZeroPress on GitHub',
+                  url: 'https://github.com/zeropress-app/',
+                  target: '_blank',
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
   };
 }
 

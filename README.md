@@ -178,7 +178,7 @@ zeropress-theme dev ./my-theme --data ./preview-data.json --no-js
 - If `404.html` exists at theme root, it is rendered; otherwise a built-in fallback page is used
 - `dev` only accepts canonical preview-data v0.7
 - `--data` must point to a local file path
-- Built-in sample data includes enabled `primary` and `footer` menus for `{{menu:*}}` previews
+- Built-in sample data includes enabled `primary` and `footer` menus for `{{menu:*}}` previews, plus a rich `sidebar` widget area with `profile`, `search`, `recent-posts`, `categories`, `tags`, `archives`, and `link-list` examples
 - Every rendered theme route receives effective `site.search`, `site.feed`, `site.archive`, and `site.comments` objects. Check their `.enabled` discriminator before using feature-specific fields such as `site.feed.url` or `site.archive.url`.
 - Post and Page templates can render a theme-owned comments island by checking `{{#if comments.enabled}}`. Active detail routes also expose `comments.target_type`, `comments.target_public_id`, `comments.provider`, `comments.api_base_url`, pagination/threading settings, and a ZeroPress-only `comments.request_token`; all other routes receive `{ "comments": { "enabled": false } }`.
 - `theme.json.features` is optional. Omitted feature flags use runtime defaults: `comments: false`, `post_index: true`, and `search: false`.
