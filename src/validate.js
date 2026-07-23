@@ -1022,6 +1022,8 @@ function analyzeRawZipEntryPaths(entries) {
   const checkedFiles = entries.filter((entry) => !entry.isDirectory).length;
   const seenRawFileNames = new Map();
   const seenPaths = new Map();
+  const normalizedEntries = [];
+  const rawEntries = [];
 
   for (const entry of entries) {
     if (entry.isSymlink) {
@@ -1083,7 +1085,6 @@ function analyzeRawZipEntryPaths(entries) {
       );
     }
 
-    const rawPath = canonicalZipEntryPath(entry.centralRawPath, entry.isDirectory);
     const normalizedPath = canonicalZipEntryPath(entry.centralPath, entry.isDirectory);
     if (isIgnorableMacOsMetadata(normalizedPath)) {
       continue;
@@ -1108,9 +1109,69 @@ function analyzeRawZipEntryPaths(entries) {
       );
     }
     seenPaths.set(collisionKey, entry.centralPath);
+    normalizedEntries.push({
+      path: entry.centralPath,
+      pathSegments: normalizedPath.split('/').map((segment) => zipPathCollisionKey(segment)),
+      isDirectory: entry.isDirectory,
+    });
+    rawEntries.push({
+      path: entry.centralRawPath,
+      pathSegments: rawZipFileNamePathSegments(entry.centralFileName, entry.isDirectory),
+      isDirectory: entry.isDirectory,
+    });
+  }
+
+  const hierarchyCollision = findZipPathHierarchyCollision(normalizedEntries)
+    || findZipPathHierarchyCollision(rawEntries);
+  if (hierarchyCollision) {
+    return createZipLayoutError(
+      'ZIP_PATH_COLLISION',
+      `Zip entry hierarchy collision: file ${JSON.stringify(hierarchyCollision.parentPath)} conflicts with descendant ${JSON.stringify(hierarchyCollision.descendantPath)}`,
+      checkedFiles,
+    );
   }
 
   return { error: null, checkedFiles };
+}
+
+function findZipPathHierarchyCollision(entries) {
+  const entriesByPath = new Map(entries.map((entry) => [
+    entry.pathSegments.join('/'),
+    entry,
+  ]));
+
+  for (const entry of entries) {
+    for (let index = 1; index < entry.pathSegments.length; index += 1) {
+      const parentKey = entry.pathSegments.slice(0, index).join('/');
+      const parentEntry = entriesByPath.get(parentKey);
+      if (parentEntry && !parentEntry.isDirectory) {
+        return {
+          parentPath: parentEntry.path,
+          descendantPath: entry.path,
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
+function rawZipFileNamePathSegments(fileName, isDirectory) {
+  const lastIndex = fileName.length - 1;
+  const pathLength = isDirectory && fileName[lastIndex] === 0x2f
+    ? lastIndex
+    : fileName.length;
+  const segments = [];
+  let segmentStart = 0;
+
+  for (let index = 0; index <= pathLength; index += 1) {
+    if (index === pathLength || fileName[index] === 0x2f) {
+      segments.push(rawZipFileNameCollisionKey(fileName.subarray(segmentStart, index)));
+      segmentStart = index + 1;
+    }
+  }
+
+  return segments;
 }
 
 function zipPathWithoutDirectoryMarker(filePath, isDirectory) {

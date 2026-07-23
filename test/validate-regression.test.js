@@ -44,12 +44,16 @@ async function createThemeDir(files = validThemeFiles()) {
   return root;
 }
 
-async function createZipFile(entries, { directories = [], generateOptions = {} } = {}) {
+async function createZipFile(entries, {
+  directories = [],
+  fileOptions = {},
+  generateOptions = {},
+} = {}) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-theme-zip-regression-'));
   const zipPath = path.join(root, 'theme.zip');
   const zip = new JSZip();
   for (const [entryPath, content] of entries) {
-    zip.file(entryPath, content);
+    zip.file(entryPath, content, fileOptions);
   }
   for (const directoryPath of directories) {
     zip.folder(directoryPath);
@@ -554,6 +558,43 @@ test('validateZipFile rejects paths that collide after normalization', async () 
   }
 });
 
+test('validateZipFile rejects files used as parent directories after normalization', async () => {
+  for (const extraEntries of [
+    [['ASSETS', 'parent file added after its descendant']],
+    [['LAYOUT.HTML/child.txt', 'descendant added after its parent file']],
+    [
+      ['assets/caf\u00e9', 'normalized parent file'],
+      ['assets/cafe\u0301/icon.svg', '<svg></svg>'],
+    ],
+  ]) {
+    const { root, zipPath } = await createThemeZip(extraEntries, {
+      fileOptions: { createFolders: false },
+    });
+
+    try {
+      const result = await validateZipFile(zipPath);
+      assert.equal(result.ok, false, extraEntries.map(([entryPath]) => entryPath).join(', '));
+      assert.equal(result.errors[0].code, 'ZIP_PATH_COLLISION');
+      assert.match(result.errors[0].message, /hierarchy collision/);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test('validateZipFile accepts explicitly declared directory ancestors', async () => {
+  const { root, zipPath } = await createThemeZip([], {
+    directories: ['assets'],
+  });
+
+  try {
+    const result = await validateZipFile(zipPath);
+    assert.equal(result.ok, true);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
 test('validateZipFile rejects leading dot path segments', async () => {
   const entries = Object.entries(validThemeFiles()).map(([entryPath, content]) => [
     `./${entryPath}`,
@@ -589,6 +630,34 @@ test('validateZipFile accepts distinct legacy-encoded paths with valid Unicode e
   try {
     const result = await validateZipFile(zipPath);
     assert.equal(result.ok, true);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test('validateZipFile rejects raw parent-file collisions hidden by Unicode extras', async () => {
+  const encodeFileName = (value) => {
+    if (value === 'assets/p\u00e1rent.txt') {
+      return Buffer.from('assets/raw-parent');
+    }
+    if (value === 'assets/ch\u00edld.txt') {
+      return Buffer.from('assets/raw-parent/child.txt');
+    }
+    return Buffer.from(value);
+  };
+  const { root, zipPath } = await createThemeZip([
+    ['assets/p\u00e1rent.txt', 'parent'],
+    ['assets/ch\u00edld.txt', 'child'],
+  ], {
+    fileOptions: { createFolders: false },
+    generateOptions: { encodeFileName },
+  });
+
+  try {
+    const result = await validateZipFile(zipPath);
+    assert.equal(result.ok, false);
+    assert.equal(result.errors[0].code, 'ZIP_PATH_COLLISION');
+    assert.match(result.errors[0].message, /hierarchy collision/);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }

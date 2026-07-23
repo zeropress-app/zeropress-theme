@@ -226,7 +226,7 @@ zeropress-theme validate ./dist/my-theme-1.0.0.zip
 - `<script>` inside `layout.html`
 - Nested slots or Mustache block syntax
 - Unsafe package paths; literal backslashes and exact empty, `.` and `..` segments are invalid, while ordinary filenames such as `name..txt` are valid
-- Directory package paths that collide after NFC and case normalization
+- Package paths that collide after NFC and case normalization, or use a file as a parent directory
 - Any symbolic link at the final input-root entry or inside the package, including internal and dangling links. Symbolic links in ancestor path components are allowed, and the accepted root is pinned to its canonical path before validation.
 - A ZIP larger than 2 MiB
 - More than 128 package entries
