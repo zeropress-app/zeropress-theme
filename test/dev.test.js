@@ -434,7 +434,7 @@ test('buildDevSnapshot serves canonical v0.7 routes, assets, and special files',
     assert.match(responseText(tag), /Intro \(3\)/);
     assert.match(responseText(tagPage2), /Archive Patterns/);
     assert.equal(asset.status, 200);
-    assert.match(responseText(asset), /body\{color:black\}/);
+    assert.match(responseText(asset), /body \{ color: black; \}/);
     assert.equal(moduleAsset.contentType, 'application/javascript');
     assert.equal(robots.status, 200);
     assert.match(responseText(robots), /User-agent:/);
@@ -770,7 +770,7 @@ test('resolveDevResponse serves generated output before public files', async () 
     const response = await resolveDevResponse('/assets/style.css', snapshot, publicDir);
 
     assert.equal(response.status, 200);
-    assert.match(responseText(response), /body\{color:black\}/);
+    assert.match(responseText(response), /body \{ color: black; \}/);
     assert.doesNotMatch(responseText(response), /color: red/);
   } finally {
     await fs.rm(themeDir, { recursive: true, force: true });
@@ -1275,7 +1275,7 @@ test('handleRequest no-js mode does not add CSP to non-HTML responses', async ()
     assert.equal(res.status, 200);
     assert.equal(res.headers['content-type'], 'text/css');
     assert.equal(res.headers['content-security-policy'], undefined);
-    assert.match(responseText({ body: res.body }), /body\{color:black\}/);
+    assert.match(responseText({ body: res.body }), /body \{ color: black; \}/);
   } finally {
     await fs.rm(themeDir, { recursive: true, force: true });
   }
