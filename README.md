@@ -4,9 +4,9 @@
 ![license](https://img.shields.io/npm/l/%40zeropress%2Ftheme)
 ![node](https://img.shields.io/node/v/%40zeropress%2Ftheme)
 
-Public ZeroPress theme developer toolkit for Theme Runtime v0.7.
+Public ZeroPress theme development toolkit for Theme Runtime v0.7.
 
-This package provides the CLI for previewing, validating, and packaging ZeroPress themes.
+This package provides the CLI for previewing and validating ZeroPress theme directories.
 
 It uses directly:
 
@@ -51,7 +51,7 @@ If you already have a theme and preview-data file:
 npx @zeropress/theme dev ./my-theme --data ./preview-data.json
 ```
 
-`@zeropress/create-theme` creates a starter theme and matching preview-data fixture. `@zeropress/theme` previews, validates, and packages that theme.
+`@zeropress/create-theme` creates a starter theme and matching preview-data fixture. `@zeropress/theme` previews and validates that theme.
 
 ## Typical Workflow
 
@@ -69,11 +69,10 @@ npx @zeropress/create-theme --name my-minimal --template minimal
 npx @zeropress/theme dev ./my-minimal/theme --data ./my-minimal/preview-data.json
 ```
 
-3. Validate or package the theme:
+3. Validate the theme:
 
 ```bash
 npx @zeropress/theme validate ./my-minimal/theme
-npx @zeropress/theme pack ./my-minimal/theme --out ./artifacts
 ```
 
 4. Build a static site with the finished theme:
@@ -88,14 +87,12 @@ For Markdown-first sites, use [@zeropress/build-pages](https://www.npmjs.com/pac
 
 ```bash
 zeropress-theme dev <themeDir> [--data <path>] [--public-dir <dir>] [--host <host>] [--port <n>] [--strict-port] [--no-js]
-zeropress-theme validate <themeDir|theme.zip> [--json]
-zeropress-theme pack <themeDir> [--out <dir>] [--name <zipFile>] [--dry-run]
+zeropress-theme validate <themeDir> [--json]
 ```
 
 ### Arguments
 
 - `<themeDir>`: Theme directory
-- `<theme.zip>`: Packaged theme zip file
 - Every command accepts exactly one positional theme path.
 
 ### Options
@@ -108,7 +105,6 @@ zeropress-theme pack <themeDir> [--out <dir>] [--name <zipFile>] [--dry-run]
 ```bash
 zeropress-theme dev ./my-theme --data ./preview-data.json
 zeropress-theme validate ./my-theme
-zeropress-theme pack ./my-theme --out ./artifacts
 ```
 
 ## Commands
@@ -186,17 +182,17 @@ zeropress-theme dev ./my-theme --data ./preview-data.json --no-js
 
 ### `validate`
 
-Validates a theme directory or packaged zip against Theme Runtime v0.7.
+Validates a theme directory against Theme Runtime v0.7.
 
 #### Usage
 
 ```bash
-zeropress-theme validate <themeDir|theme.zip> [--json]
+zeropress-theme validate <themeDir> [--json]
 ```
 
 #### Arguments
 
-- `<themeDir|theme.zip>`: Theme directory or packaged theme zip file
+- `<themeDir>`: Theme directory
 
 #### Options
 
@@ -204,7 +200,7 @@ zeropress-theme validate <themeDir|theme.zip> [--json]
 | --- | --- |
 | `--json` | Output results as JSON |
 
-When `--json` is present, validation failures, target I/O failures, malformed archives, missing required arguments, and unknown options all use the same JSON result schema on stdout and exit with code `1`. This applies even when an unknown option appears before `--json`. No human-readable error is written to stderr in this mode, so CI can parse stdout consistently.
+When `--json` is present, validation failures, target I/O failures, missing required arguments, and unknown options all use the same JSON result schema on stdout and exit with code `1`. This applies even when an unknown option appears before `--json`. No human-readable error is written to stderr in this mode, so CI can parse stdout consistently.
 
 Human-readable diagnostics make attacker-controlled terminal characters visible as `\uXXXX`, including C0/C1 controls, ESC, line controls, and Unicode direction controls. Tool-owned line breaks and ANSI colors remain intact. JSON output preserves the existing data contract and is not terminal-escaped.
 
@@ -212,7 +208,6 @@ Human-readable diagnostics make attacker-controlled terminal characters visible 
 
 ```bash
 zeropress-theme validate ./my-theme
-zeropress-theme validate ./dist/my-theme-1.0.0.zip
 ```
 
 #### Errors
@@ -228,17 +223,13 @@ zeropress-theme validate ./dist/my-theme-1.0.0.zip
 - Unsafe package paths; literal backslashes and exact empty, `.` and `..` segments are invalid, while ordinary filenames such as `name..txt` are valid
 - Package paths that collide after NFC and case normalization, or use a file as a parent directory
 - Any symbolic link at the final input-root entry or inside the package, including internal and dangling links. Symbolic links in ancestor path components are allowed, and the accepted root is pinned to its canonical path before validation.
-- A ZIP larger than 2 MiB
 - More than 128 package entries
 - A file larger than 1 MiB
-- Expanded package content larger than 4 MiB
-- ZIP64, multi-disk, or encrypted ZIP input
-- ZIP entry CRC32 mismatch
+- Package content larger than 4 MiB
 
 #### Warnings
 
 - `layout.html` does not start with `<!doctype html>`
-- macOS metadata files such as `__MACOSX/` and `._*` are ignored
 
 #### Info
 
@@ -251,58 +242,11 @@ zeropress-theme validate ./dist/my-theme-1.0.0.zip
 | `0` | Valid theme, with or without warnings or info notes |
 | `1` | Errors found |
 
-### `pack`
-
-Creates an upload-ready zip file for a theme directory.
-
-#### Usage
-
-```bash
-zeropress-theme pack <themeDir> [--out <dir>] [--name <zipFile>] [--dry-run]
-```
-
-#### Arguments
-
-- `<themeDir>`: Theme directory to package
-
-#### Options
-
-| Option | Description | Default |
-| --- | --- | --- |
-| `--out <dir>` | Output directory | `dist` |
-| `--name <zipFile>` | `.zip` filename without directory components | `{namespace}.{slug}@{version}.zip` |
-| `--dry-run` | Run the complete packaging preflight without writing files | — |
-
-#### Examples
-
-```bash
-zeropress-theme pack ./my-theme --dry-run
-zeropress-theme pack ./my-theme --out ./artifacts
-```
-
-#### Notes
-
-- Runs `validate` before packaging
-- Excludes unnecessary files such as `.git`, `node_modules`, `dist`, `*.log`, `__MACOSX`, `.DS_Store`, and lockfiles
-- When the resolved output directory is a subdirectory of the theme, excludes that entire directory. When `--out` resolves to the theme root, excludes only the current target ZIP, so repeated packs do not validate or include their previous target.
-- Allows symbolic links anywhere in the output-directory path, including a final macOS alias such as `/tmp`, by resolving the nearest existing path once to a canonical directory before validation or writing
-- Rejects a symbolic-link final zip path in real and dry-run modes
-- Rejects every symbolic link included in the theme package
-- Rejects a symbolic-link final theme input entry in real and dry-run modes. Ancestor aliases are allowed and resolved once to a canonical theme root.
-- Generates a root-flattened zip
-- Uses the validated manifest value verbatim for the default `{namespace}.{slug}@{version}.zip` name, preserving SemVer case and build metadata
-- Assigns every ZIP entry the fixed `1980-01-01T00:00:00Z` DOS timestamp and explicit DOS platform metadata, so identical input produces byte-identical archives across timezones
-- Re-validates the generated archive, including entry CRC32 values
-- Applies fixed package limits: 2 MiB ZIP, 4 MiB expanded, 1 MiB per file, and 128 entries
-- With `--dry-run`, collects and reads the same files, generates and validates the ZIP in memory, checks package limits and output-path safety, and then prints the plan without creating directories, temporary files, or a destination ZIP
 
 ## CI Usage
 
 ```bash
 zeropress-theme validate ./theme
-zeropress-theme validate ./artifacts/theme-1.0.0.zip
-zeropress-theme pack ./theme --dry-run
-zeropress-theme pack ./theme --out ./artifacts
 ```
 
 ## License

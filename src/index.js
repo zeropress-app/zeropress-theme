@@ -1,6 +1,5 @@
 import { createRequire } from 'node:module';
 import { runValidate } from './validate.js';
-import { runPack } from './pack.js';
 import { runDev } from './dev.js';
 
 const require = createRequire(import.meta.url);
@@ -29,11 +28,6 @@ export async function run(argv) {
     return code;
   }
 
-  if (command === 'pack') {
-    await runPack(rest);
-    return;
-  }
-
   if (command === 'dev') {
     await runDev(rest);
     return;
@@ -48,12 +42,10 @@ function printHelp() {
 
 Usage:
   zeropress-theme dev <themeDir> [--data <path>] [--public-dir <dir>] [--host <host>] [--port <n>] [--strict-port] [--no-js]
-  zeropress-theme validate <themeDir|theme.zip> [--json]
-  zeropress-theme pack <themeDir> [--out <dir>] [--name <zipFile>] [--dry-run]
+  zeropress-theme validate <themeDir> [--json]
 
 Arguments:
   <themeDir>            Theme directory
-  <theme.zip>           Packaged theme zip file
 
 Options:
   --help, -h            Show help
@@ -61,6 +53,5 @@ Options:
 
 Notes:
   - dev expects canonical preview-data v0.7 JSON
-  - validate checks the ZeroPress Theme Runtime v0.7 contract
-  - pack validates before packaging and re-validates the generated zip`);
+  - validate checks the ZeroPress Theme Runtime v0.7 contract`);
 }

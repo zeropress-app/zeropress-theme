@@ -1,8 +1,6 @@
 import fs from 'node:fs/promises';
 import { constants as fsConstants } from 'node:fs';
-import path from 'node:path';
 import { createRequire } from 'node:module';
-import JSZip from 'jszip';
 import {
   THEME_PACKAGE_LIMITS,
   validateThemeFiles,
@@ -18,13 +16,6 @@ import { toTerminalSafeMultilineText, toTerminalSafeText } from './terminal.js';
 
 const require = createRequire(import.meta.url);
 const { version: PACKAGE_VERSION } = require('../package.json');
-const ZipEntries = require('jszip/lib/zipEntries');
-const crc32 = require('jszip/lib/crc32');
-const {
-  CENTRAL_FILE_HEADER: ZIP_CENTRAL_FILE_HEADER,
-  LOCAL_FILE_HEADER: ZIP_LOCAL_FILE_HEADER,
-} = require('jszip/lib/signature');
-const { utf8decode: decodeZipFileName } = require('jszip/lib/utf8');
 
 export async function runValidate(argv) {
   const jsonRequested = argv.includes('--json');
@@ -34,10 +25,10 @@ export async function runValidate(argv) {
   try {
     ({ positional, flags } = parseValidateArgs(argv));
     if (!positional[0]) {
-      throw new Error('validate requires a themeDir or theme.zip argument');
+      throw new Error('validate requires a themeDir argument');
     }
     if (positional.length !== 1) {
-      throw new Error('validate accepts exactly one themeDir or theme.zip argument');
+      throw new Error('validate accepts exactly one themeDir argument');
     }
   } catch (error) {
     if (!jsonRequested) {
@@ -58,9 +49,7 @@ export async function runValidate(argv) {
 
   try {
     target = await resolveValidationTarget(targetPath);
-    result = target.type === 'zip'
-      ? await validateZipFile(target.path)
-      : await validateThemeDirectory(target.path);
+    result = await validateThemeDirectory(target.path);
   } catch (error) {
     if (!json) {
       throw error;
@@ -120,7 +109,7 @@ export async function loadThemeDirectorySnapshot(themeDir, { shouldInclude } = {
     }
     return {
       snapshot: null,
-      validation: createInvalidZipIssues([
+      validation: createValidationIssues([
         createIssue(
           'SYMLINK_NOT_ALLOWED',
           'theme directory',
@@ -165,7 +154,7 @@ export async function loadThemeDirectorySnapshot(themeDir, { shouldInclude } = {
   if (unsafeBackslashEntry) {
     return {
       snapshot: null,
-      validation: createInvalidZipIssues([
+      validation: createValidationIssues([
         createIssue(
           'PATH_ESCAPE',
           unsafeBackslashEntry.rawRelativePath,
@@ -181,7 +170,7 @@ export async function loadThemeDirectorySnapshot(themeDir, { shouldInclude } = {
   if (pathCollision) {
     return {
       snapshot: null,
-      validation: createInvalidZipIssues([
+      validation: createValidationIssues([
         createIssue(
           'THEME_PATH_COLLISION',
           pathCollision.path,
@@ -310,7 +299,7 @@ export async function validateThemeDirectorySnapshot(snapshot) {
 function findThemeDirectoryPathCollision(entries) {
   const seenPaths = new Map();
   for (const entry of entries) {
-    const collisionKey = zipPathCollisionKey(entry.relativePath);
+    const collisionKey = themePathCollisionKey(entry.relativePath);
     const existingPath = seenPaths.get(collisionKey);
     if (existingPath !== undefined) {
       return {
@@ -323,261 +312,11 @@ function findThemeDirectoryPathCollision(entries) {
   return null;
 }
 
-export async function validateZipFile(zipPath) {
-  const rawResult = await readArchiveBounded(zipPath);
-  if (rawResult.error) {
-    return createInvalidZipResult(rawResult);
-  }
-  return validateZipBuffer(rawResult.raw);
+function themePathCollisionKey(filePath) {
+  return filePath.normalize('NFC').toLowerCase();
 }
 
-export async function validateZipBuffer(rawInput) {
-  const raw = Buffer.from(rawInput);
-  if (raw.byteLength > THEME_PACKAGE_LIMITS.maxArchiveBytes) {
-    return createInvalidZipResult(createZipLayoutError(
-      'THEME_ARCHIVE_TOO_LARGE',
-      `Theme zip is ${raw.byteLength} bytes; the maximum is ${THEME_PACKAGE_LIMITS.maxArchiveBytes} bytes`,
-      0,
-    ));
-  }
-  const envelopeAnalysis = analyzeZipEnvelope(raw);
-  if (envelopeAnalysis.error) {
-    if (envelopeAnalysis.error.code === 'INVALID_ZIP') {
-      throw new Error(envelopeAnalysis.error.message);
-    }
-    return createInvalidZipResult(envelopeAnalysis);
-  }
-
-  const rawEntries = readRawZipEntries(raw);
-
-  const declaredSizeErrors = validateThemePackageLimits(
-    new Map(rawEntries
-      .filter((entry) => !entry.isDirectory)
-      .map((entry, index) => [`${entry.centralPath} [zip entry ${index + 1}]`, entry.uncompressedSize])),
-    { entryCount: rawEntries.length },
-  );
-  if (declaredSizeErrors.length > 0) {
-    return createInvalidZipIssues(declaredSizeErrors, rawEntries.filter((entry) => !entry.isDirectory).length);
-  }
-
-  const entryPathAnalysis = analyzeRawZipEntryPaths(rawEntries);
-  if (entryPathAnalysis.error) {
-    return createInvalidZipResult(entryPathAnalysis);
-  }
-
-  const zip = await JSZip.loadAsync(raw);
-  const analysis = analyzeZipLayout(Object.values(zip.files).filter((file) => !file.dir));
-  if (analysis.error) {
-    return createInvalidZipResult(analysis);
-  }
-
-  const files = new Map();
-  const expandedState = { totalBytes: 0 };
-  const rawEntriesByPath = new Map(rawEntries
-    .filter((entry) => !entry.isDirectory)
-    .map((entry) => [zipPathCollisionKey(canonicalZipEntryPath(entry.centralPath, false)), entry]));
-  try {
-    for (const { file, originalPath, relativePath } of analysis.entries) {
-      const rawEntry = rawEntriesByPath.get(zipPathCollisionKey(canonicalZipEntryPath(originalPath, false)));
-      files.set(relativePath, await readZipEntryBounded(
-        file,
-        relativePath,
-        expandedState,
-        rawEntry?.crc32,
-      ));
-    }
-  } catch (error) {
-    if (
-      error?.code === 'THEME_FILE_TOO_LARGE'
-      || error?.code === 'THEME_PACKAGE_TOO_LARGE'
-      || error?.code === 'ZIP_CRC_MISMATCH'
-    ) {
-      return createInvalidZipIssues([
-        createIssue(
-          error.code,
-          error.path,
-          error.message,
-          'error',
-          error.code === 'ZIP_CRC_MISMATCH' ? { category: 'zip_integrity' } : { category: 'theme_package_limits' },
-        ),
-      ], analysis.checkedFiles);
-    }
-    throw error;
-  }
-
-  const result = await validateThemeFiles(files, {
-    checkedFiles: analysis.checkedFiles,
-    entryCount: rawEntries.length,
-  });
-  return {
-    ...result,
-    warnings: analysis.ignoredMacOsMetadata
-      ? [createIssue('MACOS_METADATA_IGNORED', 'theme.zip', 'macOS metadata files (__MACOSX, ._*) were ignored', 'warning'), ...result.warnings]
-      : result.warnings,
-    infos: result.infos || [],
-  };
-}
-
-async function readArchiveBounded(zipPath) {
-  const handle = await fs.open(zipPath, 'r');
-  try {
-    const stat = await handle.stat();
-    if (!stat.isFile()) {
-      return createZipLayoutError('INVALID_ZIP_FILE', 'Theme zip must be a regular file', 0);
-    }
-    if (stat.size > THEME_PACKAGE_LIMITS.maxArchiveBytes) {
-      return createZipLayoutError(
-        'THEME_ARCHIVE_TOO_LARGE',
-        `Theme zip is ${stat.size} bytes; the maximum is ${THEME_PACKAGE_LIMITS.maxArchiveBytes} bytes`,
-        0,
-      );
-    }
-
-    const raw = Buffer.alloc(stat.size);
-    let offset = 0;
-    while (offset < raw.length) {
-      const { bytesRead } = await handle.read(raw, offset, raw.length - offset, offset);
-      if (bytesRead === 0) {
-        break;
-      }
-      offset += bytesRead;
-    }
-    return { error: null, raw: offset === raw.length ? raw : raw.subarray(0, offset), checkedFiles: 0 };
-  } finally {
-    await handle.close();
-  }
-}
-
-function analyzeZipEnvelope(raw) {
-  const minimumEocdSize = 22;
-  const minimumOffset = Math.max(0, raw.length - minimumEocdSize - 0xffff);
-  let eocdOffset = -1;
-
-  for (let offset = raw.length - minimumEocdSize; offset >= minimumOffset; offset -= 1) {
-    if (raw.readUInt32LE(offset) !== 0x06054b50) {
-      continue;
-    }
-    const commentLength = raw.readUInt16LE(offset + 20);
-    if (offset + minimumEocdSize + commentLength === raw.length) {
-      eocdOffset = offset;
-      break;
-    }
-  }
-
-  if (eocdOffset < 0) {
-    return createZipLayoutError('INVALID_ZIP', 'Theme zip has no valid end-of-central-directory record', 0);
-  }
-
-  const diskNumber = raw.readUInt16LE(eocdOffset + 4);
-  const centralDirectoryDisk = raw.readUInt16LE(eocdOffset + 6);
-  const entriesOnDisk = raw.readUInt16LE(eocdOffset + 8);
-  const totalEntries = raw.readUInt16LE(eocdOffset + 10);
-  const centralDirectorySize = raw.readUInt32LE(eocdOffset + 12);
-  const centralDirectoryOffset = raw.readUInt32LE(eocdOffset + 16);
-  if (
-    diskNumber === 0xffff
-    || centralDirectoryDisk === 0xffff
-    || entriesOnDisk === 0xffff
-    || totalEntries === 0xffff
-    || centralDirectorySize === 0xffffffff
-    || centralDirectoryOffset === 0xffffffff
-  ) {
-    return createZipLayoutError('ZIP64_NOT_SUPPORTED', 'ZIP64 theme packages are not supported', 0);
-  }
-  if (diskNumber !== 0 || centralDirectoryDisk !== 0 || entriesOnDisk !== totalEntries) {
-    return createZipLayoutError('MULTI_DISK_ZIP_NOT_SUPPORTED', 'Multi-disk theme packages are not supported', 0);
-  }
-  if (totalEntries > THEME_PACKAGE_LIMITS.maxEntries) {
-    return createZipLayoutError(
-      'THEME_PACKAGE_TOO_MANY_ENTRIES',
-      `Theme zip contains ${totalEntries} entries; the maximum is ${THEME_PACKAGE_LIMITS.maxEntries}`,
-      0,
-    );
-  }
-
-  return { error: null, checkedFiles: 0 };
-}
-
-async function readZipEntryBounded(file, relativePath, state, expectedCrc) {
-  const chunks = [];
-  let fileBytes = 0;
-  let actualCrc = 0;
-
-  await new Promise((resolve, reject) => {
-    const stream = file.nodeStream('nodebuffer');
-    let settled = false;
-
-    const fail = (error) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      stream.pause?.();
-      stream.destroy?.();
-      reject(error);
-    };
-
-    stream.on('data', (chunk) => {
-      fileBytes += chunk.byteLength;
-      if (fileBytes > THEME_PACKAGE_LIMITS.maxFileBytes) {
-        fail(createResourceLimitError(
-          'THEME_FILE_TOO_LARGE',
-          relativePath,
-          `Theme file exceeds the per-file maximum of ${THEME_PACKAGE_LIMITS.maxFileBytes} bytes while decompressing`,
-        ));
-        return;
-      }
-      state.totalBytes += chunk.byteLength;
-      if (state.totalBytes > THEME_PACKAGE_LIMITS.maxUncompressedBytes) {
-        fail(createResourceLimitError(
-          'THEME_PACKAGE_TOO_LARGE',
-          'theme package',
-          `Theme package exceeds the expanded maximum of ${THEME_PACKAGE_LIMITS.maxUncompressedBytes} bytes while decompressing`,
-        ));
-        return;
-      }
-      actualCrc = crc32(chunk, actualCrc);
-      chunks.push(chunk);
-    });
-    stream.once('error', fail);
-    stream.once('end', () => {
-      if (!settled) {
-        settled = true;
-        resolve();
-      }
-    });
-  });
-
-  if (expectedCrc !== undefined && (actualCrc >>> 0) !== (expectedCrc >>> 0)) {
-    throw createResourceLimitError(
-      'ZIP_CRC_MISMATCH',
-      relativePath,
-      `Theme zip entry CRC32 does not match its central directory value: ${relativePath}`,
-    );
-  }
-
-  return Buffer.concat(chunks, fileBytes);
-}
-
-function createResourceLimitError(code, resourcePath, message) {
-  const error = new Error(message);
-  error.code = code;
-  error.path = resourcePath;
-  return error;
-}
-
-function createInvalidZipResult(analysis) {
-  return {
-    ok: false,
-    errors: [createIssue(analysis.error.code, 'theme.zip', analysis.error.message, 'error')],
-    warnings: [],
-    infos: [],
-    manifest: undefined,
-    checkedFiles: analysis.checkedFiles,
-  };
-}
-
-function createInvalidZipIssues(errors, checkedFiles) {
+function createValidationIssues(errors, checkedFiles) {
   return {
     ok: false,
     errors,
@@ -589,7 +328,7 @@ function createInvalidZipIssues(errors, checkedFiles) {
 }
 
 function createThemePackageLimitResult(errors, checkedFiles) {
-  return createInvalidZipIssues(errors, checkedFiles);
+  return createValidationIssues(errors, checkedFiles);
 }
 
 async function resolveValidationTarget(inputPath) {
@@ -602,14 +341,10 @@ async function resolveValidationTarget(inputPath) {
   if (stat.isDirectory()) {
     return { type: 'directory', path: inputPath };
   }
-  if (stat.isFile() && path.extname(inputPath).toLowerCase() === '.zip') {
-    return { type: 'zip', path: inputPath };
-  }
-  throw new Error(`Validate expects a theme directory or .zip file: ${inputPath}`);
+  throw new Error(`Validate expects a theme directory: ${inputPath}`);
 }
 
 function printHuman(result, target) {
-  const label = target.type === 'zip' ? 'theme zip' : 'theme directory';
   const color = createColor(process.stdout);
   const warnings = result.warnings || [];
   const infos = groupHumanInfos(result.infos || []);
@@ -617,7 +352,7 @@ function printHuman(result, target) {
   const status = validationStatus(result);
   blocks.push([
     colorStatus(status.title, status.level, color),
-    `Target: ${toTerminalSafeText(target.path)} (${label})`,
+    `Target: ${toTerminalSafeText(target.path)} (theme directory)`,
     `Errors: ${result.errors.length}`,
     `Warnings: ${result.warnings.length}`,
     `Info: ${(result.infos || []).length}`,
@@ -790,477 +525,6 @@ function toJsonOutput(result) {
   };
 }
 
-function analyzeZipLayout(files) {
-  const normalizedEntries = [];
-
-  for (const file of files) {
-    const originalPath = String(file.unsafeOriginalName ?? file.name ?? '');
-    const normalizedPath = normalizeZipPath(originalPath);
-    const pathError = validateZipEntryPath(normalizedPath);
-    if (pathError) {
-      return createZipLayoutError(
-        'INVALID_ZIP_ENTRY_PATH',
-        `Invalid zip entry path ${JSON.stringify(originalPath)}: ${pathError}`,
-        files.length,
-      );
-    }
-
-    normalizedEntries.push({
-      file,
-      originalPath,
-      normalizedPath,
-    });
-  }
-
-  const filteredEntries = normalizedEntries.filter(({ normalizedPath }) => !isIgnorableMacOsMetadata(normalizedPath));
-  const ignoredMacOsMetadata = filteredEntries.length !== normalizedEntries.length;
-  const seenPaths = new Map();
-
-  for (const entry of filteredEntries) {
-    const collisionKey = zipPathCollisionKey(entry.normalizedPath);
-    if (seenPaths.has(collisionKey)) {
-      return createZipLayoutError(
-        'ZIP_PATH_COLLISION',
-        `Zip entry path collision: '${entry.originalPath}' conflicts with '${seenPaths.get(collisionKey)}'`,
-        filteredEntries.length,
-        ignoredMacOsMetadata,
-      );
-    }
-    seenPaths.set(collisionKey, entry.originalPath);
-  }
-
-  const normalizedFilePaths = filteredEntries.map(({ normalizedPath }) => normalizedPath);
-
-  if (normalizedFilePaths.includes('theme.json')) {
-    return createZipLayoutAnalysis(filteredEntries, '', ignoredMacOsMetadata);
-  }
-
-  const rootLevelEntries = normalizedFilePaths.filter((filePath) => !filePath.includes('/'));
-  if (rootLevelEntries.length > 0) {
-    return createZipLayoutAnalysis(filteredEntries, '', ignoredMacOsMetadata);
-  }
-
-  const topLevels = new Set(normalizedFilePaths.map((filePath) => filePath.split('/')[0]).filter(Boolean));
-  if (topLevels.size === 1) {
-    const folder = [...topLevels][0];
-    if (normalizedFilePaths.includes(`${folder}/theme.json`)) {
-      return createZipLayoutAnalysis(filteredEntries, `${folder}/`, ignoredMacOsMetadata);
-    }
-  }
-
-  if (normalizedFilePaths.some((filePath) => filePath.endsWith('/theme.json'))) {
-    return createZipLayoutError(
-      'INVALID_ZIP_ROOT',
-      'Theme package must be root-flat or wrapped in a single top-level folder',
-      filteredEntries.length,
-      ignoredMacOsMetadata,
-    );
-  }
-
-  return createZipLayoutAnalysis(filteredEntries, '', ignoredMacOsMetadata);
-}
-
-function readRawZipEntries(raw) {
-  const zipEntries = new ZipEntries({ decodeFileName: decodeZipFileName });
-  zipEntries.load(raw);
-  if (zipEntries.centralDirRecords !== zipEntries.files.length) {
-    throw new Error(
-      `Corrupted zip: expected ${zipEntries.centralDirRecords} central directory entries, found ${zipEntries.files.length}`,
-    );
-  }
-  const centralEntries = readCentralZipEntries(zipEntries);
-
-  return zipEntries.files.map((entry, index) => {
-    const centralEntry = centralEntries[index];
-    const localEntry = readLocalZipEntry(zipEntries.reader, entry.localHeaderOffset);
-
-    return {
-      centralPath: centralEntry.path,
-      centralRawPath: centralEntry.rawPath,
-      centralUnicodePath: centralEntry.unicodePath,
-      centralFileName: centralEntry.fileName,
-      localPath: localEntry.path,
-      localRawPath: localEntry.rawPath,
-      localUnicodePath: localEntry.unicodePath,
-      localFileName: localEntry.fileName,
-      jsZipPath: String(entry.fileNameStr ?? localEntry.path),
-      isDirectory: centralEntry.isDirectory || localEntry.isDirectory || entry.dir === true,
-      compressedSize: entry.compressedSize,
-      uncompressedSize: entry.uncompressedSize,
-      crc32: centralEntry.crc32,
-      isSymlink: centralEntry.isSymlink,
-    };
-  });
-}
-
-function readCentralZipEntries(zipEntries) {
-  const reader = zipEntries.reader;
-  const entries = [];
-  reader.setIndex(zipEntries.centralDirOffset);
-
-  for (let index = 0; index < zipEntries.files.length; index += 1) {
-    if (!reader.readAndCheckSignature(ZIP_CENTRAL_FILE_HEADER)) {
-      throw new Error('Corrupted zip: central directory entry is missing');
-    }
-
-    const versionMadeBy = reader.readInt(2);
-    reader.skip(2); // version needed to extract
-    const bitFlag = reader.readInt(2);
-    reader.skip(6); // compression and timestamps
-    const expectedCrc = reader.readInt(4) >>> 0;
-    reader.skip(8); // compressed and uncompressed sizes
-    const fileNameLength = reader.readInt(2);
-    const extraFieldsLength = reader.readInt(2);
-    const fileCommentLength = reader.readInt(2);
-    reader.skip(4); // disk number and internal attributes
-    const externalFileAttributes = reader.readInt(4);
-    reader.skip(4); // local header offset
-
-    const fileName = Buffer.from(reader.readData(fileNameLength));
-    const extraFields = Buffer.from(reader.readData(extraFieldsLength));
-    reader.skip(fileCommentLength);
-
-    const {
-      path: decodedPath,
-      rawPath,
-      unicodePath,
-    } = decodeRawZipEntryPath(fileName, extraFields, bitFlag);
-
-    entries.push({
-      path: decodedPath,
-      rawPath,
-      unicodePath,
-      fileName,
-      crc32: expectedCrc,
-      isSymlink: (versionMadeBy >>> 8) === 3
-        && (((externalFileAttributes >>> 16) & 0xffff) & 0o170000) === 0o120000,
-      isDirectory: (externalFileAttributes & 0x0010) !== 0
-        || decodedPath.endsWith('/')
-        || rawPath.endsWith('/'),
-    });
-  }
-
-  return entries;
-}
-
-function readLocalZipEntry(reader, localHeaderOffset) {
-  reader.setIndex(localHeaderOffset);
-  if (!reader.readAndCheckSignature(ZIP_LOCAL_FILE_HEADER)) {
-    throw new Error('Corrupted zip: local file header is missing');
-  }
-
-  reader.skip(2); // version needed to extract
-  const bitFlag = reader.readInt(2);
-  reader.skip(18); // compression, timestamps, CRC, and sizes
-  const fileNameLength = reader.readInt(2);
-  const extraFieldsLength = reader.readInt(2);
-  const fileName = Buffer.from(reader.readData(fileNameLength));
-  const extraFields = Buffer.from(reader.readData(extraFieldsLength));
-  const {
-    path: decodedPath,
-    rawPath,
-    unicodePath,
-  } = decodeRawZipEntryPath(fileName, extraFields, bitFlag);
-
-  return {
-    path: decodedPath,
-    rawPath,
-    unicodePath,
-    fileName,
-    isDirectory: decodedPath.endsWith('/') || rawPath.endsWith('/'),
-  };
-}
-
-function decodeRawZipEntryPath(fileName, extraFields, bitFlag) {
-  const rawPath = decodeZipFileName(fileName);
-  const unicodePath = readUnicodeZipPath(extraFields, fileName);
-  const usesUtf8 = (bitFlag & 0x0800) !== 0;
-
-  return {
-    path: usesUtf8 ? rawPath : unicodePath ?? rawPath,
-    rawPath,
-    unicodePath,
-  };
-}
-
-function readUnicodeZipPath(extraFields, fileName) {
-  let offset = 0;
-  let unicodePath = null;
-
-  while (offset + 4 <= extraFields.length) {
-    const fieldId = extraFields.readUInt16LE(offset);
-    const fieldLength = extraFields.readUInt16LE(offset + 2);
-    const valueOffset = offset + 4;
-    const nextOffset = valueOffset + fieldLength;
-    if (nextOffset > extraFields.length) {
-      throw new Error('Corrupted zip: invalid central directory extra field length');
-    }
-
-    if (fieldId === 0x7075 && fieldLength >= 5) {
-      const version = extraFields[valueOffset];
-      const expectedCrc = extraFields.readUInt32LE(valueOffset + 1);
-      if (version === 1 && expectedCrc === (crc32(fileName) >>> 0)) {
-        const candidatePath = decodeZipFileName(extraFields.subarray(valueOffset + 5, nextOffset));
-        if (unicodePath !== null && candidatePath !== unicodePath) {
-          throw new Error('Corrupted zip: conflicting Unicode path extra fields');
-        }
-        unicodePath = candidatePath;
-      }
-    }
-
-    offset = nextOffset;
-  }
-
-  if (offset !== extraFields.length) {
-    throw new Error('Corrupted zip: invalid central directory extra field');
-  }
-
-  return unicodePath;
-}
-
-function analyzeRawZipEntryPaths(entries) {
-  const checkedFiles = entries.filter((entry) => !entry.isDirectory).length;
-  const seenRawFileNames = new Map();
-  const seenPaths = new Map();
-  const normalizedEntries = [];
-  const rawEntries = [];
-
-  for (const entry of entries) {
-    if (entry.isSymlink) {
-      return createZipLayoutError(
-        'SYMLINK_NOT_ALLOWED',
-        `Symbolic links are not allowed in theme packages: ${entry.centralPath}`,
-        checkedFiles,
-      );
-    }
-
-    const pathRepresentations = [
-      ['central directory', entry.centralRawPath],
-      ['central directory Unicode', entry.centralPath],
-      ['local header', entry.localRawPath],
-      ['local header Unicode', entry.localPath],
-      ['JSZip decoded', entry.jsZipPath],
-    ];
-    if (entry.centralUnicodePath !== null) {
-      pathRepresentations.push(['central directory Unicode extra', entry.centralUnicodePath]);
-    }
-    if (entry.localUnicodePath !== null) {
-      pathRepresentations.push(['local header Unicode extra', entry.localUnicodePath]);
-    }
-
-    const comparablePaths = pathRepresentations.map(([source, entryPath]) => [
-      source,
-      canonicalZipEntryPath(entryPath, entry.isDirectory),
-      entryPath,
-    ]);
-    if (entry.isDirectory && comparablePaths.every(([, comparablePath]) => comparablePath === '')) {
-      continue;
-    }
-
-    for (const [source, comparablePath, entryPath] of comparablePaths) {
-      const pathError = validateZipEntryPath(comparablePath);
-      if (pathError) {
-        return createZipLayoutError(
-          'INVALID_ZIP_ENTRY_PATH',
-          `Invalid ${source} zip entry path ${JSON.stringify(entryPath)}: ${pathError}`,
-          checkedFiles,
-        );
-      }
-    }
-
-    const centralDeclaredPath = entry.centralUnicodePath ?? entry.centralPath;
-    const localDeclaredPath = entry.localUnicodePath ?? entry.localPath;
-    if (
-      !entry.centralFileName.equals(entry.localFileName)
-      || entry.centralPath !== entry.localPath
-      || entry.centralPath !== entry.jsZipPath
-      || centralDeclaredPath !== entry.centralPath
-      || localDeclaredPath !== entry.localPath
-      || centralDeclaredPath !== localDeclaredPath
-    ) {
-      return createZipLayoutError(
-        'ZIP_ENTRY_NAME_MISMATCH',
-        `Zip central directory path ${JSON.stringify(entry.centralPath)} does not match local header path ${JSON.stringify(entry.localPath)}`,
-        checkedFiles,
-      );
-    }
-
-    const normalizedPath = canonicalZipEntryPath(entry.centralPath, entry.isDirectory);
-    if (isIgnorableMacOsMetadata(normalizedPath)) {
-      continue;
-    }
-
-    const rawFileNameKey = rawZipFileNameCollisionKey(entry.centralFileName);
-    if (seenRawFileNames.has(rawFileNameKey)) {
-      return createZipLayoutError(
-        'ZIP_PATH_COLLISION',
-        `Zip entry path collision: ${JSON.stringify(entry.centralRawPath)} conflicts with ${JSON.stringify(seenRawFileNames.get(rawFileNameKey))}`,
-        checkedFiles,
-      );
-    }
-    seenRawFileNames.set(rawFileNameKey, entry.centralRawPath);
-
-    const collisionKey = zipPathCollisionKey(normalizedPath);
-    if (seenPaths.has(collisionKey)) {
-      return createZipLayoutError(
-        'ZIP_PATH_COLLISION',
-        `Zip entry path collision: ${JSON.stringify(entry.centralPath)} conflicts with ${JSON.stringify(seenPaths.get(collisionKey))}`,
-        checkedFiles,
-      );
-    }
-    seenPaths.set(collisionKey, entry.centralPath);
-    normalizedEntries.push({
-      path: entry.centralPath,
-      pathSegments: normalizedPath.split('/').map((segment) => zipPathCollisionKey(segment)),
-      isDirectory: entry.isDirectory,
-    });
-    rawEntries.push({
-      path: entry.centralRawPath,
-      pathSegments: rawZipFileNamePathSegments(entry.centralFileName, entry.isDirectory),
-      isDirectory: entry.isDirectory,
-    });
-  }
-
-  const hierarchyCollision = findZipPathHierarchyCollision(normalizedEntries)
-    || findZipPathHierarchyCollision(rawEntries);
-  if (hierarchyCollision) {
-    return createZipLayoutError(
-      'ZIP_PATH_COLLISION',
-      `Zip entry hierarchy collision: file ${JSON.stringify(hierarchyCollision.parentPath)} conflicts with descendant ${JSON.stringify(hierarchyCollision.descendantPath)}`,
-      checkedFiles,
-    );
-  }
-
-  return { error: null, checkedFiles };
-}
-
-function findZipPathHierarchyCollision(entries) {
-  const entriesByPath = new Map(entries.map((entry) => [
-    entry.pathSegments.join('/'),
-    entry,
-  ]));
-
-  for (const entry of entries) {
-    for (let index = 1; index < entry.pathSegments.length; index += 1) {
-      const parentKey = entry.pathSegments.slice(0, index).join('/');
-      const parentEntry = entriesByPath.get(parentKey);
-      if (parentEntry && !parentEntry.isDirectory) {
-        return {
-          parentPath: parentEntry.path,
-          descendantPath: entry.path,
-        };
-      }
-    }
-  }
-
-  return null;
-}
-
-function rawZipFileNamePathSegments(fileName, isDirectory) {
-  const lastIndex = fileName.length - 1;
-  const pathLength = isDirectory && fileName[lastIndex] === 0x2f
-    ? lastIndex
-    : fileName.length;
-  const segments = [];
-  let segmentStart = 0;
-
-  for (let index = 0; index <= pathLength; index += 1) {
-    if (index === pathLength || fileName[index] === 0x2f) {
-      segments.push(rawZipFileNameCollisionKey(fileName.subarray(segmentStart, index)));
-      segmentStart = index + 1;
-    }
-  }
-
-  return segments;
-}
-
-function zipPathWithoutDirectoryMarker(filePath, isDirectory) {
-  return isDirectory && filePath.endsWith('/') ? filePath.slice(0, -1) : filePath;
-}
-
-function canonicalZipEntryPath(filePath, isDirectory) {
-  return zipPathWithoutDirectoryMarker(normalizeZipPath(filePath), isDirectory);
-}
-
-function rawZipFileNameCollisionKey(fileName) {
-  const folded = Buffer.from(fileName);
-  for (let index = 0; index < folded.length; index += 1) {
-    if (folded[index] >= 0x41 && folded[index] <= 0x5a) {
-      folded[index] += 0x20;
-    }
-  }
-  return folded.toString('hex');
-}
-
-function createZipLayoutAnalysis(entries, basePrefix, ignoredMacOsMetadata) {
-  return {
-    error: null,
-    ignoredMacOsMetadata,
-    checkedFiles: entries.length,
-    entries: entries.map((entry) => ({
-      ...entry,
-      relativePath: basePrefix && entry.normalizedPath.startsWith(basePrefix)
-        ? entry.normalizedPath.slice(basePrefix.length)
-        : entry.normalizedPath,
-    })),
-  };
-}
-
-function createZipLayoutError(code, message, checkedFiles, ignoredMacOsMetadata = false) {
-  return {
-    error: { code, message },
-    ignoredMacOsMetadata,
-    checkedFiles,
-    entries: [],
-  };
-}
-
-function validateZipEntryPath(filePath) {
-  if (!filePath) {
-    return 'entry path must not be empty';
-  }
-  if (/[\u0000-\u001f\u007f]/u.test(filePath)) {
-    return 'control characters are not allowed';
-  }
-  if (filePath.includes('\\')) {
-    return 'backslash path separators are not allowed';
-  }
-  if (path.posix.isAbsolute(filePath)) {
-    return 'absolute paths are not allowed';
-  }
-  if (/^[a-zA-Z]:/.test(filePath)) {
-    return 'drive paths are not allowed';
-  }
-
-  const segments = filePath.split('/');
-  if (segments.some((segment) => segment === '')) {
-    return 'empty path segments are not allowed';
-  }
-  if (segments.some((segment) => segment === '.')) {
-    return "'.' path segments are not allowed";
-  }
-  if (segments.some((segment) => segment === '..')) {
-    return "'..' path segments are not allowed";
-  }
-
-  return null;
-}
-
-function isIgnorableMacOsMetadata(filePath) {
-  if (filePath === '__MACOSX' || filePath.startsWith('__MACOSX/')) {
-    return true;
-  }
-
-  return filePath.split('/').some((segment) => segment.startsWith('._'));
-}
-
-function normalizeZipPath(filePath) {
-  return String(filePath || '');
-}
-
-function zipPathCollisionKey(filePath) {
-  return filePath.normalize('NFC').toLowerCase();
-}
 
 function createIssue(code, issuePath, message, severity, details = {}) {
   return { code, path: issuePath, message, severity, ...details };

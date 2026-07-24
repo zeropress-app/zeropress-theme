@@ -38,7 +38,6 @@
   "dependencies": {
     "@zeropress/build-core": "0.7.1",
     "@zeropress/theme-validator": "0.7.1",
-    "jszip": "3.10.1",
     "ws": "8.21.1"
   }
 }

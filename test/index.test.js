@@ -52,7 +52,22 @@ test('run prints help and throws an error for unknown commands', async () => {
 
   assert.equal(messages.length, 1);
   assert.match(messages[0], /zeropress-theme - ZeroPress theme development toolkit/);
-  assert.match(messages[0], /zeropress-theme validate <themeDir\|theme\.zip>/);
+  assert.match(messages[0], /zeropress-theme validate <themeDir>/);
+  assert.doesNotMatch(messages[0], /\bpack\b|\.zip/);
+});
+
+test('run treats the removed pack command as unknown', async () => {
+  const originalLog = console.log;
+  console.log = () => {};
+
+  try {
+    await assert.rejects(
+      () => run(['pack', './theme']),
+      /Unknown command: pack/,
+    );
+  } finally {
+    console.log = originalLog;
+  }
 });
 
 test('the CLI error boundary makes attacker-controlled terminal characters visible', () => {
@@ -134,7 +149,7 @@ for (const testCase of [
   {
     name: 'missing required target',
     args: ['validate', '--json'],
-    message: 'validate requires a themeDir or theme.zip argument',
+    message: 'validate requires a themeDir argument',
   },
   {
     name: 'unknown option before the json flag',

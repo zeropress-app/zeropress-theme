@@ -3,8 +3,6 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import JSZip from 'jszip';
-import { runPack } from '../src/pack.js';
 import { runValidate, validateThemeDirectory } from '../src/validate.js';
 
 const packageJsonPath = new URL('../package.json', import.meta.url);
@@ -22,23 +20,6 @@ async function createThemeDir(files) {
   return root;
 }
 
-async function createZipFile(files, options = {}) {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-theme-zip-'));
-  const zipPath = path.join(root, options.zipName || 'theme.zip');
-  const zip = new JSZip();
-  const prefix = options.prefix || '';
-
-  for (const [relativePath, content] of Object.entries(files)) {
-    zip.file(`${prefix}${relativePath}`, content);
-  }
-
-  for (const [relativePath, content] of Object.entries(options.extraFiles || {})) {
-    zip.file(relativePath, content);
-  }
-
-  await fs.writeFile(zipPath, await zip.generateAsync({ type: 'uint8array' }));
-  return { root, zipPath };
-}
 
 function stripAnsi(value) {
   return value.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '');
@@ -278,79 +259,13 @@ test('runValidate keeps forced-color human output searchable after ANSI strippin
   }
 });
 
-test('runValidate requires a themeDir or theme.zip argument', async () => {
+test('runValidate requires a themeDir argument', async () => {
   await assert.rejects(
     () => runValidate([]),
-    /validate requires a themeDir or theme\.zip argument/,
+    /validate requires a themeDir argument/,
   );
 });
 
-test('runValidate accepts a valid zip file path', async () => {
-  const files = {
-    ...validThemeFiles(),
-    'archive.html': '<section>archive</section>',
-    'category.html': '<section>category</section>',
-    'tag.html': '<section>tag</section>',
-  };
-  const { root, zipPath } = await createZipFile(files);
-  const logs = [];
-  const originalLog = console.log;
-  console.log = (message) => logs.push(String(message));
-
-  try {
-    const code = await runValidate([zipPath]);
-    assert.equal(code, 0);
-    const output = stripAnsi(logs.join('\n'));
-    assert.equal(
-      output.startsWith(`Theme validation passed with warnings\nTarget: ${zipPath} (theme zip)`),
-      true,
-    );
-    assert.doesNotMatch(output, /(?:^|\n)Result:/);
-  } finally {
-    console.log = originalLog;
-    await fs.rm(root, { recursive: true, force: true });
-  }
-});
-
-test('runValidate accepts a valid single-folder zip file path', async () => {
-  const files = {
-    ...validThemeFiles(),
-    'archive.html': '<section>archive</section>',
-    'category.html': '<section>category</section>',
-    'tag.html': '<section>tag</section>',
-  };
-  const { root, zipPath } = await createZipFile(files, { prefix: 'my-theme/' });
-
-  try {
-    const code = await runValidate([zipPath]);
-    assert.equal(code, 0);
-  } finally {
-    await fs.rm(root, { recursive: true, force: true });
-  }
-});
-
-test('runValidate accepts a zip file with macOS metadata', async () => {
-  const files = {
-    ...validThemeFiles(),
-    'archive.html': '<section>archive</section>',
-    'category.html': '<section>category</section>',
-    'tag.html': '<section>tag</section>',
-  };
-  const { root, zipPath } = await createZipFile(files, {
-    prefix: 'my-theme/',
-    extraFiles: {
-      '__MACOSX/my-theme/._theme.json': 'metadata',
-      '__MACOSX/._my-theme': 'metadata',
-    },
-  });
-
-  try {
-    const code = await runValidate([zipPath]);
-    assert.equal(code, 0);
-  } finally {
-    await fs.rm(root, { recursive: true, force: true });
-  }
-});
 
 test('runValidate ignores info notes for exit code and rejects removed strict option', async () => {
   const themeDir = await createThemeDir(validThemeFiles());
@@ -362,184 +277,6 @@ test('runValidate ignores info notes for exit code and rejects removed strict op
       /Unknown option for validate: --strict/,
     );
   } finally {
-    await fs.rm(themeDir, { recursive: true, force: true });
-  }
-});
-
-test('runValidate rejects a mixed multi-root zip file path', async () => {
-  const files = {
-    ...validThemeFiles(),
-    'archive.html': '<section>archive</section>',
-    'category.html': '<section>category</section>',
-    'tag.html': '<section>tag</section>',
-  };
-  const { root, zipPath } = await createZipFile(files, {
-    prefix: 'theme-a/',
-    extraFiles: {
-      'theme-b/other.txt': 'other',
-    },
-  });
-
-  try {
-    const code = await runValidate([zipPath]);
-    assert.equal(code, 1);
-  } finally {
-    await fs.rm(root, { recursive: true, force: true });
-  }
-});
-
-test('runPack aborts when shared validation finds errors', async () => {
-  const files = validThemeFiles();
-  delete files['page.html'];
-  const themeDir = await createThemeDir(files);
-
-  await assert.rejects(() => runPack([themeDir]), /Pack aborted: validate failed/);
-  await fs.rm(themeDir, { recursive: true, force: true });
-});
-
-test('runPack requires a themeDir argument', async () => {
-  await assert.rejects(
-    () => runPack([]),
-    /pack requires a themeDir argument/,
-  );
-});
-
-test('runPack rejects extra positional arguments', async () => {
-  await assert.rejects(
-    () => runPack(['theme-one', 'theme-two']),
-    /pack accepts exactly one themeDir argument/,
-  );
-});
-
-test('runPack --dry-run prints output plan without writing zip', async () => {
-  const files = {
-    ...validThemeFiles(),
-    'archive.html': '<section>archive</section>',
-    'category.html': '<section>category</section>',
-    'tag.html': '<section>tag</section>',
-  };
-  const themeDir = await createThemeDir(files);
-  const outDir = path.join(themeDir, 'artifacts');
-  const expectedZipPath = path.join(outDir, 'test-studio.test-theme@1.0.0.zip');
-  const logs = [];
-  const originalLog = console.log;
-  console.log = (...args) => {
-    logs.push(args.join(' '));
-  };
-
-  try {
-    await runPack([themeDir, '--out', outDir, '--dry-run']);
-    await assert.rejects(() => fs.access(expectedZipPath));
-    await assert.rejects(() => fs.access(outDir));
-    assert.equal(logs.some((line) => line.includes(`Dry run: would pack theme to ${expectedZipPath}`)), true);
-    assert.equal(logs.some((line) => line.includes('Included files:')), true);
-  } finally {
-    console.log = originalLog;
-    await fs.rm(themeDir, { recursive: true, force: true });
-  }
-});
-
-test('runPack rejects names that escape the output directory', async () => {
-  const themeDir = await createThemeDir(validThemeFiles());
-  const outDir = path.join(themeDir, 'artifacts');
-  const importantPath = path.join(themeDir, 'important.txt');
-  await fs.writeFile(importantPath, 'do not overwrite', 'utf8');
-
-  try {
-    for (const invalidName of ['../important.txt', '..\\important.txt']) {
-      await assert.rejects(
-        () => runPack([themeDir, '--out', outDir, '--name', invalidName]),
-        /--name must be a filename without directory components/,
-      );
-    }
-    assert.equal(await fs.readFile(importantPath, 'utf8'), 'do not overwrite');
-  } finally {
-    await fs.rm(themeDir, { recursive: true, force: true });
-  }
-});
-
-test('runPack canonicalizes direct symlink output directories and rejects symlink files', async () => {
-  const themeDir = await createThemeDir(validThemeFiles());
-  const outputRoot = await fs.mkdtemp(path.join(canonicalTmpDir, 'zeropress-theme-pack-output-'));
-  const realOutDir = path.join(outputRoot, 'real-artifacts');
-  const linkedOutDir = path.join(outputRoot, 'linked-artifacts');
-  const danglingTargetDir = path.join(outputRoot, 'missing-target');
-  const danglingParentDir = path.join(outputRoot, 'dangling-parent');
-  const zipName = 'test-studio.test-theme@1.0.0.zip';
-  const importantPath = path.join(outputRoot, 'important.txt');
-  await fs.mkdir(realOutDir, { recursive: true });
-  await fs.writeFile(importantPath, 'do not overwrite', 'utf8');
-  await fs.symlink(realOutDir, linkedOutDir);
-  await fs.symlink(danglingTargetDir, danglingParentDir, 'dir');
-
-  try {
-    for (const extraArgs of [[], ['--dry-run']]) {
-      await assert.doesNotReject(
-        () => runPack([themeDir, '--out', linkedOutDir, ...extraArgs]),
-      );
-    }
-    const zipPath = path.join(realOutDir, zipName);
-    assert.equal((await fs.lstat(zipPath)).isFile(), true);
-
-    for (const extraArgs of [[], ['--dry-run']]) {
-      await assert.rejects(
-        () => runPack([
-          themeDir,
-          '--out',
-          path.join(danglingParentDir, 'artifacts'),
-          ...extraArgs,
-        ]),
-      );
-    }
-    await assert.rejects(fs.access(danglingTargetDir), { code: 'ENOENT' });
-
-    await fs.unlink(zipPath);
-    await fs.symlink(importantPath, zipPath);
-    for (const extraArgs of [[], ['--dry-run']]) {
-      await assert.rejects(
-        () => runPack([themeDir, '--out', realOutDir, ...extraArgs]),
-        /Pack output path must not be a symbolic link/,
-      );
-    }
-
-    assert.equal(await fs.readFile(importantPath, 'utf8'), 'do not overwrite');
-    assert.equal((await fs.lstat(zipPath)).isSymbolicLink(), true);
-  } finally {
-    await fs.rm(themeDir, { recursive: true, force: true });
-    await fs.rm(outputRoot, { recursive: true, force: true });
-  }
-});
-
-test('runPack excludes a custom output directory reached through an ancestor alias on repeated packs', {
-  skip: process.platform === 'win32',
-}, async () => {
-  const themeDir = await createThemeDir(validThemeFiles());
-  const aliasThemeDir = path.join(
-    canonicalTmpDir,
-    `zeropress-theme-pack-output-alias-${path.basename(themeDir)}`,
-  );
-  const outDir = path.join(aliasThemeDir, 'artifacts');
-  const canonicalOutDir = path.join(themeDir, 'artifacts');
-  const zipName = 'test-studio.test-theme@1.0.0.zip';
-  const zipPath = path.join(canonicalOutDir, zipName);
-  const originalLog = console.log;
-  console.log = () => {};
-  await fs.symlink(themeDir, aliasThemeDir, 'dir');
-
-  try {
-    await runPack([themeDir, '--out', outDir]);
-    await runPack([themeDir, '--out', outDir]);
-
-    const zip = await JSZip.loadAsync(await fs.readFile(zipPath));
-    assert.equal(zip.file(`artifacts/${zipName}`), null);
-    assert.equal(Object.keys(zip.files).some((filePath) => filePath.startsWith('artifacts/')), false);
-    assert.equal(
-      (await fs.readdir(canonicalOutDir)).some((name) => name.startsWith('.zeropress-theme-pack-')),
-      false,
-    );
-  } finally {
-    console.log = originalLog;
-    await fs.unlink(aliasThemeDir).catch(() => {});
     await fs.rm(themeDir, { recursive: true, force: true });
   }
 });
