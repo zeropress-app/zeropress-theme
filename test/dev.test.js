@@ -104,7 +104,7 @@ function validThemeFiles() {
       description: 'A test theme',
     }),
     'layout.html': '<html><head><title>{{meta.title}}</title>{{meta.head_tags}}</head><body>{{slot:header}}<main>{{slot:content}}</main>{{slot:footer}}</body></html>',
-    'index.html': '<h1>{{site.title}}</h1><div id="posts">{{#for post in posts.items}}<article>{{post.title}} {{post.excerpt}}</article>{{/for}}</div>',
+    'index.html': '<h1>{{site.title}}</h1><div id="posts">{{#for post in posts.items}}<article>{{post.title}}{{#if post.summary}} {{post.summary}}{{/if}}</article>{{/for}}</div>',
     'post.html': '<article><h1>{{post.title}}</h1>{{#if post.author.avatar}}<img class="author-avatar" src="{{post.author.avatar}}" alt="">{{/if}}{{#if post.featured_image}}<img class="post-featured-image" src="{{post.featured_image}}" alt="">{{/if}}<div>{{post.author.display_name}}</div><div>{{post.html}}</div></article>',
     'page.html': '<section><h1>{{page.title}}</h1>{{#if page.featured_image}}<img class="page-featured-image" src="{{page.featured_image}}" alt="">{{/if}}<div>{{page.html}}</div></section>',
     'archive.html': '<section><h1>Archive</h1>{{#for group in archive.groups}}<h2>{{group.label}}</h2>{{#for post in group.items}}<article>{{post.title}}</article>{{/for}}{{/for}}</section>',
