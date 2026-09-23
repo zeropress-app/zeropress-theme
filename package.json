@@ -1,6 +1,6 @@
 {
   "name": "@zeropress/theme",
-  "version": "0.7.3",
+  "version": "0.7.4",
   "description": "ZeroPress theme development toolkit",
   "type": "module",
   "license": "MIT",
