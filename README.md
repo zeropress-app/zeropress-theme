@@ -146,6 +146,7 @@ zeropress-theme dev ./my-theme --data ./preview-data.json --no-js
 #### Notes
 
 - Builds the theme through `@zeropress/build-core` and serves the latest in-memory output snapshot
+- Theme validation failures at startup and during rebuilds preserve report and hint line breaks. This requires the matching Build Core diagnostic support (`THEME_VALIDATION_FAILED`); unmarked errors remain escaped as single-line text.
 - Falls back to files in the public directory when a route is not generated
 - Streams public fallback files from disk instead of loading each complete file into memory; live-reload injection for public HTML is streaming as well
 - The public directory defaults to `./public/`; use `--public-dir <dir>` or `ZEROPRESS_PUBLIC_DIR` when a project needs a different public root

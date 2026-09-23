@@ -8,7 +8,7 @@ import { WebSocketServer } from 'ws';
 import { buildSiteFromThemeDir, MemoryWriter } from '@zeropress/build-core';
 import { createColor } from './color.js';
 import { getThemeDir, resolveCanonicalDirectoryRoot } from './helpers.js';
-import { toTerminalSafeText } from './terminal.js';
+import { toTerminalSafeErrorText, toTerminalSafeText } from './terminal.js';
 import { createWatcherManager } from './watchers.js';
 
 const DEV_BUILD_OPTIONS = {
@@ -172,7 +172,7 @@ export async function runDev(argv) {
             }
           }
         } else {
-          console.log(`[dev] rebuild failed: ${toTerminalSafeText(result.error.message)}`);
+          console.log(`[dev] rebuild failed: ${toTerminalSafeErrorText(result.error)}`);
         }
       } while (queued);
     } finally {

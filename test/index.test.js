@@ -9,6 +9,8 @@ import { run } from '../src/index.js';
 
 const packageJsonPath = new URL('../package.json', import.meta.url);
 const cliPath = fileURLToPath(new URL('../bin/zeropress-theme.js', import.meta.url));
+// Keep Node's color-conflict warning out of CLI output assertions.
+const cliEnv = { ...process.env, FORCE_COLOR: undefined, NO_COLOR: '1' };
 
 test('run prints help when --help appears anywhere in argv', async () => {
   const messages = [];
@@ -74,10 +76,7 @@ test('the CLI error boundary makes attacker-controlled terminal characters visib
   const command = 'bad\u001B]8;;example\u0007\n\u202Ecommand';
   const child = spawnSync(process.execPath, [cliPath, command], {
     encoding: 'utf8',
-    env: {
-      ...process.env,
-      NO_COLOR: '1',
-    },
+    env: cliEnv,
   });
 
   assert.equal(child.status, 1);
@@ -86,6 +85,58 @@ test('the CLI error boundary makes attacker-controlled terminal characters visib
   assert.equal(child.stderr.includes('\u202E'), false);
   assert.match(child.stderr, /bad\\u001B]8;;example\\u0007\\u000A\\u202Ecommand/);
 });
+
+for (const unsafeInput of [false, true]) {
+  test(`dev startup preserves validation report layout${unsafeInput ? ' while escaping diagnostic input' : ''}`, async () => {
+    const themeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zeropress-theme-diagnostics-'));
+    const files = {
+      'theme.json': JSON.stringify({
+        name: 'Test Theme',
+        namespace: 'test-studio',
+        slug: 'test-theme',
+        version: '1.0.0',
+        license: 'MIT',
+        runtime: '0.5',
+      }),
+      'layout.html': '<!doctype html><html><body>{{slot:content}}</body></html>',
+      'index.html': '<h1>{{site.title}}</h1>',
+      'post.html': '<article>{{post.html}}</article>',
+      'page.html': '<article>{{page.html}}</article>',
+      'assets/style.css': 'body {}',
+    };
+    if (unsafeInput) {
+      files['assets/evil\u001B]8;;example\u0007\n\u202E.css'] = 'body {}';
+      files['index.html'] = '<h1>{{site.\u0085\u202Ebad}}</h1>';
+    }
+
+    try {
+      for (const [relativePath, content] of Object.entries(files)) {
+        const filePath = path.join(themeDir, relativePath);
+        await fs.mkdir(path.dirname(filePath), { recursive: true });
+        await fs.writeFile(filePath, content);
+      }
+      const child = spawnSync(process.execPath, [cliPath, 'dev', themeDir], {
+        encoding: 'utf8',
+        env: cliEnv,
+        timeout: 10_000,
+      });
+
+      assert.equal(child.status, 1);
+      assert.equal(child.signal, null);
+      assert.match(child.stderr, /^\[zeropress-theme\] Theme validation failed\nErrors: \d+\nChecked files: \d+\n\nERROR /);
+      assert.match(child.stderr, /\n\nHint:\nUpdate theme\.json:\n\n"runtime": "0\.7"/);
+      assert.doesNotMatch(child.stderr, /[\u001B\u0007\u0085\u202E]/);
+      if (unsafeInput) {
+        assert.match(child.stderr, /evil\\u001B]8;;example\\u0007\\u000A\\u202E\.css/);
+        assert.match(child.stderr, /\\u0085\\u202Ebad/);
+      } else {
+        assert.equal(child.stderr.includes('\\u000A'), false);
+      }
+    } finally {
+      await fs.rm(themeDir, { recursive: true, force: true });
+    }
+  });
+}
 
 for (const flag of ['--version', '-v']) {
   test(`run prints version with ${flag}`, async () => {
@@ -130,7 +181,7 @@ test('validate --json flushes large output before exiting with failure', async (
     const child = spawnSync(
       process.execPath,
       [cliPath, 'validate', themeDir, '--json'],
-      { encoding: 'utf8', maxBuffer: 1024 * 1024 },
+      { encoding: 'utf8', env: cliEnv, maxBuffer: 1024 * 1024 },
     );
 
     assert.equal(child.status, 1);
@@ -160,6 +211,7 @@ for (const testCase of [
   test(`validate --json serializes ${testCase.name} as JSON`, () => {
     const child = spawnSync(process.execPath, [cliPath, ...testCase.args], {
       encoding: 'utf8',
+      env: cliEnv,
     });
 
     assert.equal(child.status, 1);

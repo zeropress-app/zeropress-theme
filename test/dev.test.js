@@ -1,11 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import { spawn } from 'node:child_process';
 import { Writable } from 'node:stream';
 import http from 'node:http';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { WebSocket } from 'ws';
 import {
   buildDevSnapshot,
@@ -1418,6 +1420,88 @@ test('rebuildDevSnapshot keeps the last successful snapshot when rebuild fails',
     assert.equal(resolveSnapshotResponse('/', result.snapshot).status, 200);
     assert.match(responseText(resolveSnapshotResponse('/', result.snapshot)), /ZeroPress Preview/);
   } finally {
+    await fs.rm(themeDir, { recursive: true, force: true });
+  }
+});
+
+test('dev logs multiline validation reports after watched files change', { timeout: 15_000 }, async (t) => {
+  const themeDir = await createThemeDir(validThemeFiles());
+  const probe = http.createServer();
+  let child;
+  let exited;
+  try {
+    try {
+      await new Promise((resolve, reject) => {
+        probe.once('error', reject);
+        probe.listen(0, '127.0.0.1', resolve);
+      });
+    } catch (error) {
+      if (error?.code === 'EPERM') {
+        t.skip('sandbox does not permit binding a local test server');
+        return;
+      }
+      throw error;
+    }
+    const { port } = probe.address();
+    await new Promise((resolve) => probe.close(resolve));
+    const cliPath = fileURLToPath(new URL('../bin/zeropress-theme.js', import.meta.url));
+    child = spawn(process.execPath, [cliPath, 'dev', themeDir, '--port', String(port), '--strict-port'], {
+      env: { ...process.env, FORCE_COLOR: undefined, NO_COLOR: '1' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    exited = new Promise((resolve) => child.once('exit', resolve));
+    let output = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => { output += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    const waitForOutput = async (pattern) => {
+      if (pattern.test(output)) return;
+      await new Promise((resolve, reject) => {
+        const cleanup = () => {
+          clearTimeout(timer);
+          child.stdout.off('data', onData);
+          child.off('exit', onExit);
+          child.off('error', onError);
+        };
+        const onData = () => {
+          if (pattern.test(output)) {
+            cleanup();
+            resolve();
+          }
+        };
+        const onExit = (code) => {
+          cleanup();
+          reject(new Error(`dev exited with ${code}: ${stderr}`));
+        };
+        const onError = (error) => { cleanup(); reject(error); };
+        const timer = setTimeout(() => {
+          cleanup();
+          reject(new Error(`Timed out waiting for dev output: ${output} ${stderr}`));
+        }, 5_000);
+        child.stdout.on('data', onData);
+        child.once('exit', onExit);
+        child.once('error', onError);
+      });
+    };
+
+    await waitForOutput(/\[dev\] running at /);
+    const manifest = JSON.parse(await fs.readFile(path.join(themeDir, 'theme.json'), 'utf8'));
+    manifest.runtime = '0.5';
+    await fs.writeFile(path.join(themeDir, 'theme.json'), JSON.stringify(manifest));
+    await waitForOutput(/\[dev\] rebuild failed:[\s\S]*"runtime": "0\.7"/);
+    assert.match(output, /\[dev\] rebuild failed: Theme validation failed\nErrors: 1\nChecked files: \d+\n\nERROR INVALID_RUNTIME_VERSION/);
+    assert.match(output, /Hint:\nUpdate theme\.json:\n\n"runtime": "0\.7"/);
+    assert.equal(output.includes('\\u000A'), false);
+    const response = await fetch(`http://127.0.0.1:${port}/`);
+    assert.equal(response.status, 200);
+    assert.match(await response.text(), /ZeroPress Preview/);
+  } finally {
+    if (probe.listening) await new Promise((resolve) => probe.close(resolve));
+    if (child?.pid && child.exitCode === null && child.signalCode === null) {
+      child.kill('SIGTERM');
+      const killTimer = setTimeout(() => child.kill('SIGKILL'), 2_000);
+      try { await exited; } finally { clearTimeout(killTimer); }
+    }
     await fs.rm(themeDir, { recursive: true, force: true });
   }
 });

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { run } from '../src/index.js';
 import { createColor } from '../src/color.js';
-import { toTerminalSafeText } from '../src/terminal.js';
+import { toTerminalSafeErrorText } from '../src/terminal.js';
 
 run(process.argv.slice(2))
   .then((code) => {
@@ -10,7 +10,7 @@ run(process.argv.slice(2))
     }
   })
   .catch((error) => {
-    console.error(colorizeError(`[zeropress-theme] ${toTerminalSafeText(error.message)}`));
+    console.error(colorizeError(`[zeropress-theme] ${toTerminalSafeErrorText(error)}`));
     process.exitCode = 1;
   });
 

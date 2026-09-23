@@ -12,3 +12,12 @@ export function toTerminalSafeMultilineText(value) {
     .map((line) => toTerminalSafeText(line))
     .join('\n');
 }
+
+export function toTerminalSafeErrorText(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  // Build Core escapes diagnostic values before adding this report's layout.
+  if (error?.code === 'THEME_VALIDATION_FAILED') {
+    return toTerminalSafeMultilineText(message);
+  }
+  return toTerminalSafeText(message);
+}
