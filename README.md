@@ -146,6 +146,7 @@ zeropress-theme dev ./my-theme --data ./preview-data.json --no-js
 #### Notes
 
 - Builds the theme through `@zeropress/build-core` and serves the latest in-memory output snapshot
+- Prints nonfatal build warnings to stderr on the first build and each successful rebuild. A theme's optional `menu_slots.<id>.max_depth` limits rendered depth, counting top-level items as 1; deeper items produce `MENU_MAX_DEPTH_EXCEEDED`. Omission leaves the menu tree unchanged.
 - Theme validation failures at startup and during rebuilds preserve report and hint line breaks. This requires the matching Build Core diagnostic support (`THEME_VALIDATION_FAILED`); unmarked errors remain escaped as single-line text.
 - Falls back to files in the public directory when a route is not generated
 - Streams public fallback files from disk instead of loading each complete file into memory; live-reload injection for public HTML is streaming as well

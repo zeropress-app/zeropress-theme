@@ -106,6 +106,7 @@ export async function runDev(argv) {
   });
 
   let snapshot = await buildSnapshot();
+  printBuildWarnings(snapshot.warnings);
   const server = http.createServer((req, res) => {
     handleRequest(req, res, snapshot, publicDir, { noJs }).catch((error) => {
       handleRequestFailure(res, error);
@@ -166,6 +167,7 @@ export async function runDev(argv) {
         const result = await rebuildDevSnapshot(snapshot, buildSnapshot);
         if (result.changed) {
           snapshot = result.snapshot;
+          printBuildWarnings(snapshot.warnings);
           for (const client of wss?.clients || []) {
             if (client.readyState === 1) {
               client.send('reload');
@@ -639,7 +641,7 @@ export async function buildDevSnapshot({ themeDir, previewData, publicDir = null
   const hasPublicRobotsTxt = await publicRobotsTxtExists(publicDir);
   const publicFavicon = await discoverPublicFavicon(publicDir);
   const sitemapStylesheetHref = await discoverPublicSitemapStylesheet(publicDir);
-  await buildSiteFromThemeDir({
+  const result = await buildSiteFromThemeDir({
     previewData,
     themeDir,
     writer,
@@ -663,9 +665,20 @@ export async function buildDevSnapshot({ themeDir, previewData, publicDir = null
 
   return {
     files,
+    warnings: result.warnings,
     fallbackNotFoundHtml: BUILTIN_404_HTML,
     outputStyle: getPreviewOutputStyle(previewData),
   };
+}
+
+export function formatBuildWarning(warning, stream = process.stderr) {
+  return createColor(stream).yellow(toTerminalSafeText(`[${warning.code}] ${warning.message}`));
+}
+
+function printBuildWarnings(warnings) {
+  for (const warning of warnings) {
+    console.warn(formatBuildWarning(warning));
+  }
 }
 
 export async function rebuildDevSnapshot(currentSnapshot, buildSnapshot) {

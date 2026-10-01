@@ -1424,8 +1424,17 @@ test('rebuildDevSnapshot keeps the last successful snapshot when rebuild fails',
   }
 });
 
-test('dev logs multiline validation reports after watched files change', { timeout: 15_000 }, async (t) => {
-  const themeDir = await createThemeDir(validThemeFiles());
+test('dev reports menu warnings on initial builds and rebuilds and retains the last good snapshot on failure', { timeout: 20_000 }, async (t) => {
+  const files = validThemeFiles();
+  const manifest = JSON.parse(files['theme.json']);
+  manifest.menu_slots = { primary: { title: 'Primary', max_depth: 1 } };
+  files['theme.json'] = JSON.stringify(manifest);
+  files['partials/header.html'] = '{{menu:primary}}';
+  const data = defaultPreviewData();
+  const menuItem = (title, children = []) => ({ title, url: '/', target: '_self', children });
+  data.menus.primary.items = [menuItem('Parent', [menuItem('Child')])];
+  files['preview-data.json'] = JSON.stringify(data);
+  const themeDir = await createThemeDir(files);
   const probe = http.createServer();
   let child;
   let exited;
@@ -1445,7 +1454,7 @@ test('dev logs multiline validation reports after watched files change', { timeo
     const { port } = probe.address();
     await new Promise((resolve) => probe.close(resolve));
     const cliPath = fileURLToPath(new URL('../bin/zeropress-theme.js', import.meta.url));
-    child = spawn(process.execPath, [cliPath, 'dev', themeDir, '--port', String(port), '--strict-port'], {
+    child = spawn(process.execPath, [cliPath, 'dev', themeDir, '--data', path.join(themeDir, 'preview-data.json'), '--port', String(port), '--strict-port'], {
       env: { ...process.env, FORCE_COLOR: undefined, NO_COLOR: '1' },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -1455,16 +1464,17 @@ test('dev logs multiline validation reports after watched files change', { timeo
     child.stdout.on('data', (chunk) => { output += chunk; });
     child.stderr.on('data', (chunk) => { stderr += chunk; });
     const waitForOutput = async (pattern) => {
-      if (pattern.test(output)) return;
+      if (pattern.test(output + stderr)) return;
       await new Promise((resolve, reject) => {
         const cleanup = () => {
           clearTimeout(timer);
           child.stdout.off('data', onData);
+          child.stderr.off('data', onData);
           child.off('exit', onExit);
           child.off('error', onError);
         };
         const onData = () => {
-          if (pattern.test(output)) {
+          if (pattern.test(output + stderr)) {
             cleanup();
             resolve();
           }
@@ -1479,13 +1489,16 @@ test('dev logs multiline validation reports after watched files change', { timeo
           reject(new Error(`Timed out waiting for dev output: ${output} ${stderr}`));
         }, 5_000);
         child.stdout.on('data', onData);
+        child.stderr.on('data', onData);
         child.once('exit', onExit);
         child.once('error', onError);
       });
     };
 
     await waitForOutput(/\[dev\] running at /);
-    const manifest = JSON.parse(await fs.readFile(path.join(themeDir, 'theme.json'), 'utf8'));
+    assert.equal((stderr.match(/MENU_MAX_DEPTH_EXCEEDED/g) || []).length, 1);
+    assert.match(stderr, /depth 2; the theme supports 1\. 1 deeper item/);
+    const initialHtml = await (await fetch(`http://127.0.0.1:${port}/`)).text();
     manifest.runtime = '0.5';
     await fs.writeFile(path.join(themeDir, 'theme.json'), JSON.stringify(manifest));
     await waitForOutput(/\[dev\] rebuild failed:[\s\S]*"runtime": "0\.7"/);
@@ -1495,6 +1508,12 @@ test('dev logs multiline validation reports after watched files change', { timeo
     const response = await fetch(`http://127.0.0.1:${port}/`);
     assert.equal(response.status, 200);
     assert.match(await response.text(), /ZeroPress Preview/);
+    assert.equal(await (await fetch(`http://127.0.0.1:${port}/`)).text(), initialHtml);
+    assert.equal((stderr.match(/MENU_MAX_DEPTH_EXCEEDED/g) || []).length, 1, 'Failed rebuilds do not repeat old warnings');
+    manifest.runtime = '0.7';
+    await fs.writeFile(path.join(themeDir, 'theme.json'), JSON.stringify(manifest));
+    await waitForOutput(/MENU_MAX_DEPTH_EXCEEDED[\s\S]*MENU_MAX_DEPTH_EXCEEDED/);
+    assert.equal((stderr.match(/MENU_MAX_DEPTH_EXCEEDED/g) || []).length, 2);
   } finally {
     if (probe.listening) await new Promise((resolve) => probe.close(resolve));
     if (child?.pid && child.exitCode === null && child.signalCode === null) {
