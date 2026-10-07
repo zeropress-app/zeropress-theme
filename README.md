@@ -16,9 +16,9 @@ It uses directly:
 Public contract references:
 
 - [Theme Runtime v0.7 Spec](https://zeropress.dev/reference/theme-runtime/specs/v0.7/)
-- [Theme Runtime v0.7 Schema](https://schemas.zeropress.dev/theme-runtime/v0.7/schema.json)
+- [Theme Runtime v0.7 Schema](https://www.schemastore.org/zeropress-theme-runtime-0.7.json)
 - [Preview Data v0.7 Spec](https://zeropress.dev/reference/preview-data/specs/v0.7/)
-- [Preview Data v0.7 Schema](https://schemas.zeropress.dev/preview-data/v0.7/schema.json)
+- [Preview Data v0.7 Schema](https://www.schemastore.org/zeropress-preview-data-0.7.json)
 
 ## Install
 
@@ -42,13 +42,13 @@ npx @zeropress/create-theme --name my-minimal --template minimal
 Then preview the generated theme with the generated preview data:
 
 ```bash
-npx @zeropress/theme dev ./my-minimal/theme --data ./my-minimal/preview-data.json
+npx @zeropress/theme dev ./my-minimal/theme --data ./my-minimal/zeropress-preview-data.json
 ```
 
 If you already have a theme and preview-data file:
 
 ```bash
-npx @zeropress/theme dev ./my-theme --data ./preview-data.json
+npx @zeropress/theme dev ./my-theme --data ./zeropress-preview-data.json
 ```
 
 `@zeropress/create-theme` creates a starter theme and matching preview-data fixture. `@zeropress/theme` previews and validates that theme.
@@ -66,7 +66,7 @@ npx @zeropress/create-theme --name my-minimal --template minimal
 2. Preview and iterate on the theme:
 
 ```bash
-npx @zeropress/theme dev ./my-minimal/theme --data ./my-minimal/preview-data.json
+npx @zeropress/theme dev ./my-minimal/theme --data ./my-minimal/zeropress-preview-data.json
 ```
 
 3. Validate the theme:
@@ -78,7 +78,7 @@ npx @zeropress/theme validate ./my-minimal/theme
 4. Build a static site with the finished theme:
 
 ```bash
-npx @zeropress/build ./my-minimal/theme --data ./my-minimal/preview-data.json --out ./dist
+npx @zeropress/build ./my-minimal/theme --data ./my-minimal/zeropress-preview-data.json --out ./dist
 ```
 
 For Markdown-first sites, use [@zeropress/build-pages](https://www.npmjs.com/package/@zeropress/build-pages) instead of writing preview-data by hand.
@@ -103,7 +103,7 @@ zeropress-theme validate <themeDir> [--json]
 ## Examples
 
 ```bash
-zeropress-theme dev ./my-theme --data ./preview-data.json
+zeropress-theme dev ./my-theme --data ./zeropress-preview-data.json
 zeropress-theme validate ./my-theme
 ```
 
@@ -138,9 +138,9 @@ zeropress-theme dev <themeDir> [--data <path>] [--public-dir <dir>] [--host <hos
 
 ```bash
 zeropress-theme dev ./my-theme
-zeropress-theme dev ./my-theme --data ./preview-data.json
-zeropress-theme dev ./my-theme --data ./preview-data.json --public-dir ./public
-zeropress-theme dev ./my-theme --data ./preview-data.json --no-js
+zeropress-theme dev ./my-theme --data ./zeropress-preview-data.json
+zeropress-theme dev ./my-theme --data ./zeropress-preview-data.json --public-dir ./public
+zeropress-theme dev ./my-theme --data ./zeropress-preview-data.json --no-js
 ```
 
 #### Notes
